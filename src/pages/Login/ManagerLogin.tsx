@@ -1,5 +1,5 @@
 import logo from "../../assets/icons/sku_logo.png";
-import Button from "../../components/common/button/Buttont";
+import Button from "../../components/common/button/Button";
 
 import { useNavigate } from "react-router-dom";
 
@@ -59,7 +59,9 @@ export default function Login() {
         </a>
       </div>
 
-      <Button title="로그인" />
+      <div className="w-[339px]">
+        <Button title="로그인" />
+      </div>
     </div>
   );
 }

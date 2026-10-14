@@ -27,6 +27,9 @@ export const myReports: Report[] = [
     description: "복도 불이 계속 깜빡거려요.",
     status: "해결 완료",
     createdAt: "2026-10-10T18:30:00",
+    resolution:
+      "복도 조명 상태를 점검한 후 고장 난 형광등을 새 LED 조명으로 교체했습니다. 현재 정상적으로 작동하는 것을 확인했습니다.",
+    resolvedAt: "2026-10-12 14:30",
   },
   {
     id: 4,

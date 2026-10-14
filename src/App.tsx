@@ -7,6 +7,8 @@ import Signup from "./pages/Signup/Signup";
 import ReportDetail from "./pages/ReportDetail/ReportDetail";
 import ReportCreate from "./pages/ReportCreate/ReportCreate";
 import ReportComplete from "./pages/ReportComplete/ReportComplete";
+import MyReport from "./pages/MyReport/MyReport";
+import MyReportDetail from "./pages/MyReportDetail/MyReportDetail";
 
 export default function App() {
   return (
@@ -20,6 +22,8 @@ export default function App() {
           <Route path="/reports/:id" element={<ReportDetail />} />
           <Route path="/student/report" element={<ReportCreate />} />
           <Route path="/reports/complete" element={<ReportComplete />} />
+          <Route path="/my-report" element={<MyReport />} />
+          <Route path="/my-report/:id" element={<MyReportDetail />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 const menuItems = [
   { label: "홈", path: "/" },
   { label: "제보하기", path: "/student/report" },
-  { label: "내 제보", path: "/student/reports" },
+  { label: "내 제보", path: "/my-report" },
   { label: "마이", path: "/student/my" },
 ];
 

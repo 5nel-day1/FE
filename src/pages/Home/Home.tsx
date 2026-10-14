@@ -46,7 +46,10 @@ export default function Home() {
             전달됩니다.
           </p>
 
-          <Button title="제보하기" />
+          <Button
+            title="제보하기"
+            onClick={() => navigate("/student/report")}
+          />
         </section>
 
         {/* 진행 중인 내 제보 */}

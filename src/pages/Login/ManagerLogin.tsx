@@ -21,7 +21,7 @@ export default function Login() {
       <div className="relative w-[329px] h-13 bg-[#D9D9D9] rounded-[10px] mt-[17px]">
         {/* 학생 */}
         <div
-          onClick={() => navigate("/login")}
+          onClick={() => navigate("/")}
           className="cursor-pointer text-[#4C4949] text-base font-semibold absolute left-[73px] top-[14px]"
         >
           학생
@@ -35,10 +35,10 @@ export default function Login() {
 
       {/* 관리자 ID 입력 */}
       <div className="w-full max-w-[339px] h-21 p-1 flex flex-col justify-start items-start gap-2 mt-[27px]">
-        <p className="text-[#727070] text-sm font-semibold">관리자 ID</p>
+        <p className="text-[#727070] text-sm font-semibold">관리자 코드</p>
         <input
           className="w-[331px] h-[50px] pl-[10px] bg-white rounded-[10px] outline-1 outline-[#D9D9D9] text-[#999292] text-sm -font-medium"
-          placeholder="예: facility01"
+          placeholder="예: 0000"
         />
       </div>
 

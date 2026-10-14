@@ -102,7 +102,7 @@ export const campusIssues: CampusIssue[] = [
     building: "문예관",
     floor: "1층",
     space: "복도",
-    description: "복도 천장 형광등 4개를 LED 등으로 교체했습니다.",
+    description: "복도 천장 조명이 어둡고 일부 형광등이 켜지지 않아요.",
     status: "해결 완료",
     category: "조명",
     relatedReports: 3,
@@ -110,6 +110,9 @@ export const campusIssues: CampusIssue[] = [
     createdAt: "2026-10-06T16:00:00",
     detail:
       "복도 천장 형광등 4개를 LED 등으로 교체하여 조명 문제를 해결했습니다.",
+    resolution:
+      "복도 천장 형광등 4개를 LED 등으로 교체하여 조명 문제를 해결했습니다.",
+    resolvedAt: "10.06",
     imageUrl: null,
     likes: 11,
     comments: [
@@ -132,7 +135,7 @@ export const campusIssues: CampusIssue[] = [
     building: "본관",
     floor: "1층",
     space: "화장실",
-    description: "핸드타월 디스펜서를 수리하고 비누를 보충했습니다.",
+    description: "화장실 비누가 비어 있고 핸드타월이 나오지 않아요.",
     status: "해결 완료",
     category: "위생",
     relatedReports: 2,
@@ -140,6 +143,9 @@ export const campusIssues: CampusIssue[] = [
     createdAt: "2026-10-04T11:00:00",
     detail:
       "고장 난 핸드타월 디스펜서를 수리하고 부족했던 비누를 보충했습니다.",
+    resolution:
+      "핸드타월 디스펜서를 수리하고 비누를 보충했습니다. 비품 점검 주기를 주 2회로 조정했습니다.",
+    resolvedAt: "10.04",
     imageUrl: null,
     likes: 4,
     comments: [],
@@ -149,7 +155,7 @@ export const campusIssues: CampusIssue[] = [
     building: "학생회관",
     floor: "2층",
     space: "휴게실",
-    description: "정수기 필터를 교체하고 수질 검사를 완료했습니다.",
+    description: "휴게실 정수기에서 이상한 냄새가 나고 물맛이 좋지 않아요.",
     status: "해결 완료",
     category: "위생",
     relatedReports: 3,
@@ -157,6 +163,9 @@ export const campusIssues: CampusIssue[] = [
     createdAt: "2026-09-29T15:30:00",
     detail:
       "정수기 필터를 새 제품으로 교체하고 수질 검사를 완료했습니다.",
+    resolution:
+      "정수기 필터를 새 제품으로 교체하고 수질 검사를 완료했습니다. 점검 결과 정상적으로 이용 가능한 상태입니다.",
+    resolvedAt: "09.29",
     imageUrl: null,
     likes: 9,
     comments: [

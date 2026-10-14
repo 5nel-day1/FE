@@ -4,7 +4,7 @@ const menuItems = [
   { label: "홈", path: "/" },
   { label: "제보하기", path: "/student/report" },
   { label: "내 제보", path: "/my-report" },
-  { label: "마이", path: "/student/my" },
+  { label: "마이", path: "/mypage" },
 ];
 
 export default function Footer() {

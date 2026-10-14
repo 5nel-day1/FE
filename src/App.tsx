@@ -16,8 +16,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<RootLayout />}>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<StudentLogin />} />
+          <Route path="/" element={<StudentLogin />} />
+          <Route path="/home" element={<Home />} />
           <Route path="/login/manager" element={<ManagerLogin />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/reports/:id" element={<ReportDetail />} />

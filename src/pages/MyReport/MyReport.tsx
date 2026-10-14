@@ -7,7 +7,7 @@ export default function MyReport() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-[#F8F9F7]">
+    <div className="min-h-screen bg-[#F8F9F7] pb-[73px]">
       <main className="w-full px-5 py-8 sm:px-8 sm:py-10">
         {/* 페이지 제목 */}
         <div className="mb-7 flex items-center justify-between gap-3">
@@ -49,9 +49,10 @@ export default function MyReport() {
             ))}
           </div>
         )}
-        
       </main>
-      <Footer />
+      <div className="fixed bottom-0 left-0 z-50 w-full">
+        <Footer />
+      </div>
     </div>
   );
 }

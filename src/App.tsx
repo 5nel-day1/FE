@@ -9,6 +9,7 @@ import ReportCreate from "./pages/ReportCreate/ReportCreate";
 import ReportComplete from "./pages/ReportComplete/ReportComplete";
 import MyReport from "./pages/MyReport/MyReport";
 import MyReportDetail from "./pages/MyReportDetail/MyReportDetail";
+import MyPage from "./pages/Mypage/Mypage";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/reports/complete" element={<ReportComplete />} />
           <Route path="/my-report" element={<MyReport />} />
           <Route path="/my-report/:id" element={<MyReportDetail />} />
+          <Route path="/mypage" element={<MyPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

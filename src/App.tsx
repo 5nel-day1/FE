@@ -4,6 +4,7 @@ import Home from "./pages/Home/Home";
 import StudentLogin from "./pages/Login/StudentLogin";
 import ManagerLogin from "./pages/Login/ManagerLogin";
 import Signup from "./pages/Signup/Signup";
+import ReportDetail from "./pages/ReportDetail/ReportDetail";
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
           <Route path="/login" element={<StudentLogin />} />
           <Route path="/login/manager" element={<ManagerLogin />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/reports/:id" element={<ReportDetail />} />
         </Route>
       </Routes>
     </BrowserRouter>

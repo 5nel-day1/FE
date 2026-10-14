@@ -9,8 +9,10 @@ import CampusIssueFilter, {
 } from "../../components/campus/CampusIssueFilter";
 import { campusIssues } from "../../mocks/campusIssues";
 import CampusIssueCard from "../../components/campus/CampusIssueCard";
+import { useNavigate } from "react-router-dom";
 
 export default function Home() {
+  const navigate = useNavigate();
   // 진행 중인 제보 중 최신 2개만 표시
   const recentReports = myReports
     .filter((report) => report.status !== "해결 완료")
@@ -110,7 +112,14 @@ export default function Home() {
           {/* 문제 현황 카드 목록 */}
           <div className="mt-3 flex flex-col gap-[10px]">
             {filteredIssues.map((issue) => (
-              <CampusIssueCard key={issue.id} issue={issue} />
+              <button
+                key={issue.id}
+                type="button"
+                onClick={() => navigate(`/reports/${issue.id}`)}
+                className="block w-full rounded-[20px] text-left cursor-pointer"
+              >
+                <CampusIssueCard issue={issue} />
+              </button>
             ))}
           </div>
         </section>

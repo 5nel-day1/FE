@@ -47,6 +47,7 @@ export default function CampusIssueFilter({
                 text-xs font-medium
                 sm:text-sm
                 transition-colors
+                cursor-pointer
                 ${
                   isSelected
                     ? "border-black bg-black text-white"

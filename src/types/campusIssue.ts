@@ -35,6 +35,10 @@ export interface CampusIssue {
   // 사진
   imageUrl: string | null;
 
+  // 해결 완료 시 처리 정보
+  resolution?: string;
+  resolvedAt?: string;
+
   // 공감 및 댓글
   likes: number;
   comments: CampusIssueComment[];

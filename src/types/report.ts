@@ -1,4 +1,4 @@
-// 제보 청리 상태
+// 제보 처리 상태
 export type ReportStatus = "접수" | "확인 중" | "처리 중" | "해결 완료";
 
 // 제보 데이터
@@ -11,6 +11,8 @@ export interface Report {
   imageUrl?: string;
   status: ReportStatus;
   createdAt: string;
+  resolution?: string;
+  resolvedAt?: string;
 }
 
 // 제보 등록 요청 데이터

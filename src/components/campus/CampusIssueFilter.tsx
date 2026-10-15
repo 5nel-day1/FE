@@ -1,5 +1,6 @@
 import type { ReportStatus } from "../../types/report";
 import type { CampusIssue } from "../../types/campusIssue";
+import { useIssueStore } from "../../stores/useIssueStore";
 
 export type IssueFilter = "전체" | ReportStatus;
 
@@ -22,14 +23,23 @@ export default function CampusIssueFilter({
   selectedFilter,
   onFilterChange,
 }: CampusIssueFilterProps) {
+  // 관리자에서 변경한 문제 상태
+  const storedIssues = useIssueStore((state) => state.issues);
+
+  // 최신 상태를 반영한 문제 목록
+  const currentIssues = issues.map((issue) => ({
+    ...issue,
+    status: storedIssues[issue.id]?.status ?? issue.status,
+  }));
+
   return (
     <div className="w-full overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
       <div className="flex w-max min-w-full items-center gap-2 py-1">
         {filters.map((filter) => {
           const count =
             filter === "전체"
-              ? issues.length
-              : issues.filter((issue) => issue.status === filter).length;
+              ? currentIssues.length
+              : currentIssues.filter((issue) => issue.status === filter).length;
 
           const isSelected = selectedFilter === filter;
 

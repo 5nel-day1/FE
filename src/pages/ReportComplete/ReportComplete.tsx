@@ -92,7 +92,7 @@ export default function ReportComplete() {
         <div className="mt-8 flex w-full flex-col gap-3 sm:flex-row">
           <button
             type="button"
-            onClick={() => navigate("/my-reports")}
+            onClick={() => navigate("/my-report")}
             className="flex h-14 w-full cursor-pointer items-center justify-center rounded-xl bg-[#3B8519] text-base font-bold text-white transition-colors hover:bg-[#306D15]"
           >
             내 제보 확인
@@ -100,7 +100,7 @@ export default function ReportComplete() {
 
           <button
             type="button"
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/home")}
             className="flex h-14 w-full cursor-pointer items-center justify-center rounded-xl border border-[#D9D9D9] bg-white text-base font-bold text-[#374151] transition-colors hover:bg-[#F3F4F6]"
           >
             홈으로

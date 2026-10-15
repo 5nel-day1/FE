@@ -61,7 +61,7 @@ export default function Login() {
       </div>
 
       <div className="w-[339px]">
-        <Button title="로그인" />
+        <Button title="로그인" onClick={() => navigate("/admin/dashboard")}/>
       </div>
     </div>
   );

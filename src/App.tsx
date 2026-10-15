@@ -10,6 +10,7 @@ import ReportComplete from "./pages/ReportComplete/ReportComplete";
 import MyReport from "./pages/MyReport/MyReport";
 import MyReportDetail from "./pages/MyReportDetail/MyReportDetail";
 import MyPage from "./pages/Mypage/Mypage";
+import AdminDashboard from "./pages/AdminDashboard/AdminDashboard";
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
           <Route path="/my-report" element={<MyReport />} />
           <Route path="/my-report/:id" element={<MyReportDetail />} />
           <Route path="/mypage" element={<MyPage />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -13,7 +13,11 @@ export default function ReportDetailCard({
 }: ReportDetailCardProps) {
   const isResolved = report.status === "해결 완료";
 
-  const location = [report.building, report.floor, report.space]
+  const location = [
+    report.building,
+    report.floor,
+    report.space,
+  ]
     .filter(Boolean)
     .join(" ");
 
@@ -51,7 +55,9 @@ export default function ReportDetailCard({
       <div className="my-3 border-t border-[#DEDEDE]" />
 
       {/* 문제 내용 */}
-      <p className="text-xs text-[#777777]">문제 내용</p>
+      <p className="text-xs text-[#777777]">
+        문제 내용
+      </p>
 
       <p className="mt-2 whitespace-pre-wrap break-words text-base font-semibold leading-[1.8] text-black">
         {report.description}
@@ -59,10 +65,11 @@ export default function ReportDetailCard({
 
       {/* 처리 상태별 UI */}
       {isResolved ? (
-        // 해결 완료: 처리 결과 표시
         <section className="mt-5 rounded-xl border border-[#3B8519] bg-[#F7FBF5] p-3">
           <div className="flex flex-wrap items-baseline gap-2">
-            <h3 className="text-sm font-bold text-[#3B8519]">처리 결과</h3>
+            <h3 className="text-sm font-bold text-[#3B8519]">
+              처리 결과
+            </h3>
 
             {report.resolvedAt && (
               <span className="text-xs text-[#999999]">
@@ -72,13 +79,15 @@ export default function ReportDetailCard({
           </div>
 
           <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-[#333333]">
-            {report.resolution ?? "처리 결과가 등록되지 않았습니다."}
+            {report.resolution ??
+              "처리 결과가 등록되지 않았습니다."}
           </p>
         </section>
       ) : (
-        // 접수 / 확인 중 / 처리 중: 제보 사진 표시
         <section className="mt-5">
-          <p className="mb-2 text-xs text-[#777777]">제보 사진</p>
+          <p className="mb-2 text-xs text-[#777777]">
+            제보 사진
+          </p>
 
           {report.imageUrl ? (
             <img
@@ -97,7 +106,6 @@ export default function ReportDetailCard({
 
       {/* 공감 및 댓글 */}
       <div className="mt-4 grid grid-cols-2 gap-4">
-        {/* 공감 버튼 */}
         <button
           type="button"
           onClick={onToggleLike}
@@ -111,7 +119,6 @@ export default function ReportDetailCard({
           {isLiked ? "공감함" : "공감"} {report.likes}
         </button>
 
-        {/* 댓글 버튼 */}
         <button
           type="button"
           className="min-h-12 rounded-xl border border-[#DADADA] bg-white text-sm font-semibold text-black"

@@ -13,6 +13,11 @@ export interface Report {
   createdAt: string;
   resolution?: string;
   resolvedAt?: string;
+
+  // 관리자 페이지 연동
+  userId?: number;
+  issueId?: number;
+  aiSummary?: string;
 }
 
 // 제보 등록 요청 데이터

@@ -25,7 +25,7 @@ export default function Login() {
         </div>
         {/* 관리자 */}
         <div
-          onClick={() => navigate("/login/manager")}
+          onClick={() => navigate("/admin/login")}
           className="cursor-pointer text-[#4C4949] text-base font-semibold absolute left-[225px] top-[13px]"
         >
           관리자
@@ -60,7 +60,7 @@ export default function Login() {
       </div>
 
       <div className="w-[339px]">
-        <Button title="로그인" />
+        <Button title="로그인" onClick={() => navigate("/home")} />
       </div>
     </div>
   );

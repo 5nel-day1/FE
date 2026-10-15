@@ -3,6 +3,7 @@ import type { IssueAnalysis } from "../../types/adminDashboard";
 import { campusIssues } from "../../mocks/campusIssues";
 import { getRelatedReportCount } from "../../mocks/adminDashboard";
 import ReportStatus from "../common/ReportStatus/ReportStatus";
+import { useIssueStore } from "../../stores/useIssueStore";
 
 interface AnomalyCardProps {
   analysis: IssueAnalysis;
@@ -10,6 +11,11 @@ interface AnomalyCardProps {
 
 const AnomalyCard = ({ analysis }: AnomalyCardProps) => {
   const navigate = useNavigate();
+
+  // Zustand에서 현재 문제의 최신 처리 상태 가져오기
+  const currentStatus = useIssueStore(
+    (state) => state.issues[analysis.issueId]?.status,
+  );
 
   // AI 분석 결과와 연결된 통합 문제
   const issue = campusIssues.find((item) => item.id === analysis.issueId);
@@ -49,8 +55,8 @@ const AnomalyCard = ({ analysis }: AnomalyCardProps) => {
 
         {/* 오른쪽: 처리 상태 및 그래프 */}
         <div className="flex shrink-0 flex-col items-end justify-between self-stretch gap-4">
-          {/* 기존 공통 컴포넌트 재사용 */}
-          <ReportStatus status={issue.status} />
+          {/* Zustand에 저장된 최신 상태 표시 */}
+          <ReportStatus status={currentStatus ?? issue.status} />
 
           {/* 미니 그래프 */}
           <div

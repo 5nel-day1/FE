@@ -154,7 +154,7 @@ export default function Signup() {
 
     const timer = window.setTimeout(() => {
       if (isSuccess) {
-        navigate("/login");
+        navigate("/");
       } else {
         setToastMessage("");
       }

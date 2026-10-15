@@ -1,47 +1,197 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+
 import Footer from "../../components/footer/Footer";
 import Header from "../../components/header/Header";
 import Button from "../../components/common/button/Button";
 import ReportStatus from "../../components/common/ReportStatus/ReportStatus";
-import { myReports } from "../../mocks/myReport";
-import { useState } from "react";
+
+import type { CampusIssue, CampusIssueComment } from "../../types/campusIssue";
+
 import CampusIssueFilter, {
   type IssueFilter,
 } from "../../components/campus/CampusIssueFilter";
-import { campusIssues } from "../../mocks/campusIssues";
 import CampusIssueCard from "../../components/campus/CampusIssueCard";
-import { useNavigate } from "react-router-dom";
+
+import { reports } from "../../mocks/reports";
+import { campusIssues } from "../../mocks/campusIssues";
+
+import { useIssueStore } from "../../stores/useIssueStore";
+import { useReportStore } from "../../stores/useReportStore";
+
+// ----------------------------------------
+// 댓글 및 공감 저장소
+// ----------------------------------------
+
+const STORAGE_KEY = "catch-u-issue-engagement-v1";
+
+interface IssueEngagement {
+  comments: CampusIssueComment[];
+  myCommentIds: number[];
+  isLiked: boolean;
+}
+
+type EngagementStorage = Record<string, IssueEngagement>;
+
+// 특정 문제의 저장된 댓글 및 공감 정보 조회
+const getStoredEngagement = (
+  issueId: string | number,
+): IssueEngagement | null => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+
+    if (!stored) return null;
+
+    const parsed: unknown = JSON.parse(stored);
+
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      return null;
+    }
+
+    const engagement = (parsed as EngagementStorage)[String(issueId)];
+
+    if (!engagement || typeof engagement !== "object") {
+      return null;
+    }
+
+    if (
+      !Array.isArray(engagement.comments) ||
+      typeof engagement.isLiked !== "boolean"
+    ) {
+      return null;
+    }
+
+    return engagement;
+  } catch {
+    return null;
+  }
+};
 
 export default function Home() {
   const navigate = useNavigate();
-  // 진행 중인 제보 중 최신 2개만 표시
-  const recentReports = myReports
+
+  // 관리자와 학생이 동일한 문제 상태 사용
+  const issues = useIssueStore((state) => state.issues);
+
+  // 학생이 새로 등록한 제보
+  const submittedReports = useReportStore((state) => state.reports);
+
+  // 캠퍼스 문제 현황 필터
+  const [selectedFilter, setSelectedFilter] = useState<IssueFilter>("전체");
+
+  // ----------------------------------------
+  // 진행 중인 내 제보
+  // ----------------------------------------
+
+  // 기존 목업 데이터 + 새로 등록한 제보
+  // 해결 완료된 제보 제외, 최신 2개 표시
+  const recentReports = [
+    ...submittedReports.map((report) => ({
+      ...report,
+      status: issues[report.issueId ?? report.id]?.status ?? report.status,
+    })),
+
+    ...reports.map((report) => ({
+      ...report,
+      status: issues[report.issueId]?.status ?? report.status,
+    })),
+  ]
     .filter((report) => report.status !== "해결 완료")
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    )
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 2);
 
-  const [selectedFilter, setSelectedFilter] = useState<IssueFilter>("전체");
+  // ----------------------------------------
+  // 캠퍼스 문제 현황
+  // ----------------------------------------
+
+  // 기존 캠퍼스 문제 + 댓글 및 공감 동기화
+  const existingCampusIssues: CampusIssue[] = campusIssues.map((issue) => {
+    const engagement = getStoredEngagement(issue.id);
+
+    return {
+      ...issue,
+
+      // 관리자 처리 상태
+      status: issues[issue.id]?.status ?? issue.status,
+
+      // 상세 페이지에서 작성한 댓글
+      comments: engagement?.comments ?? issue.comments,
+
+      // 상세 페이지에서 누른 공감
+      likes: issue.likes + (engagement?.isLiked ? 1 : 0),
+    };
+  });
+
+  // 기존 문제에 연결되지 않은 신규 제보
+  const newCampusIssues: CampusIssue[] = submittedReports
+    .filter((report) => report.issueId == null)
+    .map((report) => {
+      const engagement = getStoredEngagement(report.id);
+
+      return {
+        // 기존 CampusIssue 구조 기반
+        ...campusIssues[0],
+
+        id: report.id,
+
+        building: report.building,
+        floor: report.floor,
+        space: report.space,
+
+        description: report.description,
+        detail: report.description,
+        aiSummary: "AI 분석 대기 중입니다.",
+
+        createdAt: report.createdAt,
+        dateLabel: report.createdAt.slice(0, 10),
+
+        imageUrl: report.imageUrl ?? "",
+
+        category: "분석 대기",
+
+        // 관리자 처리 상태
+        status: issues[report.issueId ?? report.id]?.status ?? report.status,
+
+        relatedReports: 1,
+
+        // 상세 페이지에서 누른 공감
+        likes: engagement?.isLiked ? 1 : 0,
+
+        // 상세 페이지에서 작성한 댓글
+        comments: engagement?.comments ?? [],
+      };
+    });
+
+  // 기존 문제 + 신규 문제
+  const syncedCampusIssues: CampusIssue[] = [
+    ...newCampusIssues,
+    ...existingCampusIssues,
+  ];
+
+  // 선택한 상태에 따라 필터링
   const filteredIssues =
     selectedFilter === "전체"
-      ? campusIssues
-      : campusIssues.filter((issue) => issue.status === selectedFilter);
+      ? syncedCampusIssues
+      : syncedCampusIssues.filter((issue) => issue.status === selectedFilter);
 
   return (
-    <div className="min-h-screen pb-[73px] mb-5">
+    <div className="mb-5 min-h-screen pb-[73px]">
       <Header />
 
       <main className="w-full px-4 sm:px-6 lg:px-8">
         {/* 안내 문구 + 제보하기 */}
-        <section className="mt-[21px] w-full rounded-[20px] border border-[#D9D9D9] bg-white p-4 sm:p-6 lg:p-8 flex flex-col items-start gap-[10px] lg:gap-4">
-          <p className="text-black text-xl sm:text-2xl lg:text-3xl font-bold leading-snug">
+        <section className="mt-[21px] flex w-full flex-col items-start gap-[10px] rounded-[20px] border border-[#D9D9D9] bg-white p-4 sm:p-6 lg:gap-4 lg:p-8">
+          <p className="text-xl font-bold leading-snug text-black sm:text-2xl lg:text-3xl">
             캠퍼스 시설 · 위생 불편을
             <br />
             제보해 주십시오.
           </p>
 
-          <p className="text-[#727070] text-xs sm:text-sm lg:text-base font-normal leading-relaxed">
+          <p className="text-xs font-normal leading-relaxed text-[#727070] sm:text-sm lg:text-base">
             접수된 제보는 AI가 분석하여 같은 문제끼리 묶은 뒤 시설관리팀에
             전달됩니다.
           </p>
@@ -53,13 +203,16 @@ export default function Home() {
         </section>
 
         {/* 진행 중인 내 제보 */}
-        <section className="mt-5 w-full flex flex-col gap-[9px]">
+        <section className="mt-5 flex w-full flex-col gap-[9px]">
           <div className="flex w-full items-center justify-between">
-            <p className="text-black text-sm font-bold sm:text-base lg:text-xl">
+            <p className="text-sm font-bold text-black sm:text-base lg:text-xl">
               진행 중인 내 제보
             </p>
 
-            <p className="text-[#3B8519] text-xs font-semibold sm:text-sm lg:text-base">
+            <p
+              onClick={() => navigate("/my-report")}
+              className="cursor-pointer text-xs font-semibold text-[#3B8519] sm:text-sm lg:text-base"
+            >
               전체보기
             </p>
           </div>
@@ -74,7 +227,11 @@ export default function Home() {
               <ul className="divide-y divide-[#D9D9D9]">
                 {recentReports.map((report) => (
                   <li
-                    key={report.id}
+                    key={
+                      "receiptNumber" in report
+                        ? report.receiptNumber
+                        : `mock-${report.id}`
+                    }
                     className="flex min-w-0 items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5"
                   >
                     {/* 제보 장소 + 내용 */}
@@ -106,7 +263,7 @@ export default function Home() {
           {/* 상태별 필터 */}
           <div className="mt-3">
             <CampusIssueFilter
-              issues={campusIssues}
+              issues={syncedCampusIssues}
               selectedFilter={selectedFilter}
               onFilterChange={setSelectedFilter}
             />
@@ -119,19 +276,22 @@ export default function Home() {
                 key={issue.id}
                 type="button"
                 onClick={() => navigate(`/reports/${issue.id}`)}
-                className="block w-full rounded-[20px] text-left cursor-pointer"
+                className="block w-full cursor-pointer rounded-[20px] text-left"
               >
                 <CampusIssueCard issue={issue} />
               </button>
             ))}
           </div>
         </section>
+
+        {/* 안내 문구 */}
         <p className="mt-3 w-full text-xs leading-relaxed text-[#727070] sm:text-sm lg:text-base">
           개별 제보 내용과 제보자 정보는 공개되지 않으며, 같은 문제로 묶인
           현황만 표시됩니다.
         </p>
       </main>
 
+      {/* 하단 푸터 */}
       <div className="fixed bottom-0 left-0 z-50 w-full">
         <Footer />
       </div>

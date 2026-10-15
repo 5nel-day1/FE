@@ -8,6 +8,8 @@ import ReportLocationInput from "../../components/reportCreate/ReportLocationInp
 import ReportContentInput from "../../components/reportCreate/ReportContentInput";
 import ReportImageUpload from "../../components/reportCreate/ReportImageUpload";
 
+import { useReportStore } from "../../stores/useReportStore";
+
 import type {
   ReportCreateForm,
   ReportSubmission,
@@ -21,13 +23,36 @@ const initialForm: ReportCreateForm = {
   image: null,
 };
 
+// 이미지 파일을 저장 가능한 문자열로 변환
+const fileToDataUrl = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("이미지 변환에 실패했습니다."));
+      }
+    };
+
+    reader.onerror = () => {
+      reject(new Error("이미지를 읽을 수 없습니다."));
+    };
+
+    reader.readAsDataURL(file);
+  });
+};
+
 export default function ReportCreate() {
   const navigate = useNavigate();
 
+  const addReport = useReportStore((state) => state.addReport);
+
   const [form, setForm] = useState<ReportCreateForm>(initialForm);
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 입력값 변경
   const updateForm = <K extends keyof ReportCreateForm>(
     key: K,
     value: ReportCreateForm[K],
@@ -40,63 +65,71 @@ export default function ReportCreate() {
     setError("");
   };
 
-  // 접수번호 생성
-  const generateReceiptNumber = () => {
-    const lastNumber = Number(localStorage.getItem("lastReportNumber") ?? "0");
-
-    const nextNumber = lastNumber + 1;
-
-    const receiptNumber = `SKU${String(nextNumber).padStart(4, "0")}`;
-
-    localStorage.setItem("lastReportNumber", String(nextNumber));
-
-    return receiptNumber;
-  };
-
-  // 제보 제출
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (
+    event: FormEvent<HTMLFormElement>,
+  ) => {
     event.preventDefault();
 
-    // 건물 선택 검사
+    if (isSubmitting) return;
+
     if (!form.building) {
       setError("건물을 선택해 주세요.");
       return;
     }
 
-    // 층 선택 검사
     if (!form.floor) {
       setError("층을 선택해 주세요.");
       return;
     }
 
-    // 세부 공간 입력 검사
     if (!form.space.trim()) {
       setError("세부 공간을 입력해 주세요.");
       return;
     }
 
-    // 문제 내용 입력 검사
     if (!form.content.trim()) {
       setError("문제 내용을 입력해 주세요.");
       return;
     }
 
-    // 접수번호 생성
-    const receiptNumber = generateReceiptNumber();
+    setIsSubmitting(true);
+    setError("");
 
-    // 제보 접수 정보
-    const submission: ReportSubmission = {
-      receiptNumber,
-      building: form.building,
-      floor: form.floor,
-      space: form.space.trim(),
-      content: form.content.trim(),
-    };
+    try {
+      // 첨부한 사진을 Data URL로 변환
+      const imageUrl = form.image
+        ? await fileToDataUrl(form.image)
+        : undefined;
 
-    // 제보 완료 페이지로 이동
-    navigate("/reports/complete", {
-      state: { submission },
-    });
+      // 이미지까지 포함하여 제보 저장
+      const createdReport = addReport({
+        userId: 1,
+        building: form.building,
+        floor: form.floor,
+        space: form.space.trim(),
+        description: form.content.trim(),
+        issueId: null,
+        imageUrl,
+      });
+
+      const submission: ReportSubmission = {
+        receiptNumber: createdReport.receiptNumber,
+        building: createdReport.building,
+        floor: createdReport.floor,
+        space: createdReport.space,
+        content: createdReport.description,
+      };
+
+      navigate("/reports/complete", {
+        state: { submission },
+      });
+    } catch {
+      setError(
+        "사진을 저장하지 못했습니다. 이미지 크기를 줄이거나 다시 첨부해 주세요.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -111,14 +144,19 @@ export default function ReportCreate() {
           취소
         </button>
 
-        <h1 className="text-lg font-bold text-[#111827]">제보하기</h1>
+        <h1 className="text-lg font-bold text-[#111827]">
+          제보하기
+        </h1>
       </header>
 
       {/* 메인 */}
       <main className="mx-auto w-full max-w-[720px] px-5 py-8 sm:px-8 sm:py-10">
         <form onSubmit={handleSubmit} noValidate>
           {/* 장소 */}
-          <section aria-labelledby="report-place-title" className="space-y-7">
+          <section
+            aria-labelledby="report-place-title"
+            className="space-y-7"
+          >
             <h2
               id="report-place-title"
               className="text-lg font-bold text-[#111827]"
@@ -126,22 +164,25 @@ export default function ReportCreate() {
               장소 <span className="text-[#3B8519]">*</span>
             </h2>
 
-            {/* 건물 선택 */}
             <BuildingSelector
               value={form.building}
-              onChange={(value) => updateForm("building", value)}
+              onChange={(value) =>
+                updateForm("building", value)
+              }
             />
 
-            {/* 층 선택 */}
             <FloorSelector
               value={form.floor}
-              onChange={(value) => updateForm("floor", value)}
+              onChange={(value) =>
+                updateForm("floor", value)
+              }
             />
 
-            {/* 세부 공간 입력 */}
             <ReportLocationInput
               value={form.space}
-              onChange={(value) => updateForm("space", value)}
+              onChange={(value) =>
+                updateForm("space", value)
+              }
             />
           </section>
 
@@ -153,7 +194,9 @@ export default function ReportCreate() {
 
             <ReportContentInput
               value={form.content}
-              onChange={(value) => updateForm("content", value)}
+              onChange={(value) =>
+                updateForm("content", value)
+              }
             />
           </section>
 
@@ -161,12 +204,16 @@ export default function ReportCreate() {
           <section className="mt-10">
             <h2 className="mb-4 text-lg font-bold text-[#111827]">
               사진{" "}
-              <span className="text-sm font-normal text-[#9CA3AF]">(선택)</span>
+              <span className="text-sm font-normal text-[#9CA3AF]">
+                (선택)
+              </span>
             </h2>
 
             <ReportImageUpload
               value={form.image}
-              onChange={(value) => updateForm("image", value)}
+              onChange={(value) =>
+                updateForm("image", value)
+              }
             />
 
             <p className="mt-3 text-xs text-[#9CA3AF]">
@@ -176,7 +223,10 @@ export default function ReportCreate() {
 
           {/* 오류 메시지 */}
           {error && (
-            <p role="alert" className="mt-6 text-sm font-medium text-red-600">
+            <p
+              role="alert"
+              className="mt-6 text-sm font-medium text-red-600"
+            >
               {error}
             </p>
           )}
@@ -184,9 +234,10 @@ export default function ReportCreate() {
           {/* 제출 버튼 */}
           <button
             type="submit"
-            className="mt-10 flex h-14 w-full cursor-pointer items-center justify-center rounded-xl bg-[#3B8519] text-base font-bold text-white transition-colors hover:bg-[#306D15]"
+            disabled={isSubmitting}
+            className="mt-10 flex h-14 w-full cursor-pointer items-center justify-center rounded-xl bg-[#3B8519] text-base font-bold text-white transition-colors hover:bg-[#306D15] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            제출하기
+            {isSubmitting ? "제출 중..." : "제출하기"}
           </button>
         </form>
       </main>

@@ -1,5 +1,9 @@
 import { useNavigate } from "react-router-dom";
-import { recentReports } from "../../mocks/reports";
+
+import { reports } from "../../mocks/reports";
+import { useIssueStore } from "../../stores/useIssueStore";
+import { useReportStore } from "../../stores/useReportStore";
+
 import ReportStatus from "../common/ReportStatus/ReportStatus";
 
 const formatDate = (dateString: string) => {
@@ -20,8 +24,47 @@ const formatDate = (dateString: string) => {
 const RecentReportList = () => {
   const navigate = useNavigate();
 
+  // 관리자에서 변경한 문제 상태
+  const issues = useIssueStore((state) => state.issues);
+
+  // 학생이 새로 등록한 제보
+  const submittedReports = useReportStore((state) => state.reports);
+
+  // 목업 데이터 + 새로 등록한 제보
+  // 해결 완료 제외, 최신 6건 표시
+  const activeReports = [
+    ...submittedReports.map((report) => ({
+      ...report,
+      aiSummary: report.description,
+
+      // 신규 제보도 관리자 처리 상태 반영
+      status:
+        issues[report.issueId ?? report.id]?.status ??
+        report.status,
+
+      sourceKey: `submitted-${report.id}`,
+    })),
+
+    ...reports.map((report) => ({
+      ...report,
+
+      // 기존 목업 제보의 관리자 처리 상태 반영
+      status:
+        issues[report.issueId]?.status ??
+        report.status,
+
+      sourceKey: `mock-${report.id}`,
+    })),
+  ]
+    .filter((report) => report.status !== "해결 완료")
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 6);
+
   return (
-    <section className="w-full" aria-labelledby="recent-reports-heading">
+    <section
+      className="w-full"
+      aria-labelledby="recent-reports-heading"
+    >
       <div className="mb-4 flex items-center justify-between">
         <h2
           id="recent-reports-heading"
@@ -30,30 +73,45 @@ const RecentReportList = () => {
           최근 제보
         </h2>
 
-        <span className="text-[12px] text-[#6B7280]">최신 6건</span>
+        <span className="text-[12px] text-[#6B7280]">
+          최신 {activeReports.length}건
+        </span>
       </div>
 
-      {recentReports.length === 0 ? (
+      {activeReports.length === 0 ? (
         <div className="rounded-2xl border border-[#E5E7EB] bg-white px-5 py-10 text-center text-sm text-[#6B7280]">
-          아직 등록된 제보가 없습니다.
+          현재 확인할 제보가 없습니다.
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-sm">
-          {recentReports.map((report, index) => (
+          {activeReports.map((report, index) => (
             <button
-              key={report.id}
+              key={report.sourceKey}
               type="button"
-              onClick={() => navigate(`/admin/problems/${report.issueId}`)}
-              className={`flex w-full items-center justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-[#F8FAFC] sm:px-5 ${
-                index !== recentReports.length - 1
+              onClick={() => {
+                if (
+                  report.sourceKey.startsWith("submitted-")
+                ) {
+                  navigate(
+                    `/admin/problems/submitted/${report.id}`,
+                  );
+                } else if (report.issueId != null) {
+                  navigate(
+                    `/admin/problems/${report.issueId}`,
+                  );
+                }
+              }}
+              className={`flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-[#F8FAFC] sm:px-5 ${
+                index !== activeReports.length - 1
                   ? "border-b border-[#EEF0F2]"
                   : ""
               }`}
             >
-              {/* 왼쪽: 제보 정보 */}
+              {/* 제보 정보 */}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[14px] font-semibold text-[#13213C] sm:text-[16px]">
-                  {report.building} {report.floor} / {report.aiSummary}
+                  {report.building} {report.floor} /{" "}
+                  {report.aiSummary}
                 </p>
 
                 <time
@@ -64,7 +122,7 @@ const RecentReportList = () => {
                 </time>
               </div>
 
-              {/* 오른쪽: 처리 상태 */}
+              {/* 처리 상태 */}
               <div className="ml-auto shrink-0">
                 <ReportStatus status={report.status} />
               </div>

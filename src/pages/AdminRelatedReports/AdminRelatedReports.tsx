@@ -9,7 +9,7 @@ import backButton from "../../assets/images/back_button.png";
 const formatDate = (dateString: string) => {
   const [date, time = ""] = dateString.split("T");
 
-  const [year, month, day] = date.split("-");
+  const [, month, day] = date.split("-");
 
   return `${month}.${day} ${time.slice(0, 5)}`;
 };

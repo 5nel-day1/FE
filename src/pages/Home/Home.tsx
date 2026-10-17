@@ -2,12 +2,10 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getMyReports, getReports } from "../../api/reports";
-import { getIssueGroups } from "../../api/issueGroups";
 import { getComments } from "../../api/comments";
 
 import type { ReportListItem, ReportApiStatus } from "../../types/report";
 import type { CampusIssue } from "../../types/campusIssue";
-import type { IssueGroup } from "../../types/issueGroup";
 
 import Footer from "../../components/footer/Footer";
 import Header from "../../components/header/Header";
@@ -42,9 +40,6 @@ export default function Home() {
   const [commentCounts, setCommentCounts] = useState<Record<number, number>>(
     {},
   );
-
-  // AI 문제 그룹 목록 (상태별 숫자 계산 전용)
-  const [issueGroups, setIssueGroups] = useState<IssueGroup[]>([]);
 
   // 내 제보 목록
   const [myReports, setMyReports] = useState<ReportListItem[]>([]);
@@ -147,31 +142,6 @@ export default function Home() {
     };
   }, [serverReports]);
 
-  // AI 문제 그룹 목록 조회
-  useEffect(() => {
-    let active = true;
-
-    const fetchIssueGroups = async () => {
-      try {
-        const response = await getIssueGroups();
-
-        if (!active) return;
-
-        if (response.success && Array.isArray(response.data)) {
-          setIssueGroups(response.data);
-        }
-      } catch (error) {
-        console.error("문제 그룹 상태별 건수 조회 실패:", error);
-      }
-    };
-
-    void fetchIssueGroups();
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
   // 내 제보 목록 조회
   useEffect(() => {
     let active = true;
@@ -243,27 +213,6 @@ export default function Home() {
       likes: report.likeCount,
       comments: [],
       commentCount: commentCounts[report.id],
-    };
-  });
-
-  // 상태별 개수 계산을 위한 문제 그룹 데이터
-  const issueCountItems: CampusIssue[] = issueGroups.map((group) => {
-    return {
-      id: group.id,
-      building: group.building,
-      floor: group.floor,
-      space: group.facility,
-      description: group.aiSummary,
-      detail: group.aiSummary,
-      aiSummary: group.aiSummary,
-      createdAt: "",
-      dateLabel: "",
-      imageUrl: "",
-      category: group.problemType,
-      status: STATUS_LABELS[group.status],
-      relatedReports: 0,
-      likes: 0,
-      comments: [],
     };
   });
 
@@ -362,10 +311,10 @@ export default function Home() {
             캠퍼스 문제 현황
           </h2>
 
-          {/* 상태별 필터: 숫자만 문제 그룹 API 기준 */}
+          {/* 상태별 필터: 제보 목록 기준으로 개수 계산 */}
           <div className="mt-3">
             <CampusIssueFilter
-              issues={issueCountItems}
+              issues={syncedCampusIssues}
               selectedFilter={selectedFilter}
               onFilterChange={setSelectedFilter}
             />

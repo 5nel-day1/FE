@@ -19,8 +19,11 @@ export default function ReportDetailCard({
 
   const imageUrl = report.imageUrl?.trim() ?? "";
 
-  const showImage =
-    Boolean(imageUrl) && failedImageUrl !== imageUrl;
+  // 이미지가 없는 경우와 로딩에 실패한 경우 구분
+  const imageUnavailable = !imageUrl;
+  const imageFailed = Boolean(imageUrl) && failedImageUrl === imageUrl;
+
+  const showImage = Boolean(imageUrl) && !imageFailed;
 
   const location = [
     report.building,
@@ -103,13 +106,22 @@ export default function ReportDetailCard({
               src={imageUrl}
               alt={`${location} 제보 사진`}
               className="h-32 w-52 max-w-full rounded-[18px] object-cover"
-              onError={() => {
+              onError={(event) => {
+                console.error("제보 이미지 로딩 실패:", {
+                  imageUrl,
+                  currentSrc: event.currentTarget.currentSrc,
+                });
+
                 setFailedImageUrl(imageUrl);
               }}
             />
           ) : (
             <div className="flex h-32 w-52 max-w-full items-center justify-center rounded-[18px] bg-[#F5F5F5] px-3 text-center text-xs text-[#777777]">
-              등록된 이미지가 없습니다.
+              {imageUnavailable
+                ? "등록된 이미지가 없습니다."
+                : imageFailed
+                  ? "이미지를 불러오지 못했습니다."
+                  : "등록된 이미지가 없습니다."}
             </div>
           )}
         </section>

@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 
 import { getMyReports, getReports } from "../../api/reports";
 import { getIssueGroups } from "../../api/issueGroups";
+import { getComments } from "../../api/comments";
 
 import type { ReportListItem, ReportApiStatus } from "../../types/report";
+import type { CampusIssue } from "../../types/campusIssue";
 import type { IssueGroup } from "../../types/issueGroup";
 
 import Footer from "../../components/footer/Footer";
@@ -12,60 +14,10 @@ import Header from "../../components/header/Header";
 import Button from "../../components/common/button/Button";
 import ReportStatus from "../../components/common/ReportStatus/ReportStatus";
 
-import type { CampusIssue, CampusIssueComment } from "../../types/campusIssue";
-
 import CampusIssueFilter, {
   type IssueFilter,
 } from "../../components/campus/CampusIssueFilter";
 import CampusIssueCard from "../../components/campus/CampusIssueCard";
-
-// 댓글 및 공감 저장소
-const STORAGE_KEY = "catch-u-issue-engagement-v1";
-
-interface IssueEngagement {
-  comments: CampusIssueComment[];
-  myCommentIds: number[];
-  isLiked: boolean;
-}
-
-type EngagementStorage = Record<string, IssueEngagement>;
-
-const getStoredEngagement = (
-  issueId: string | number,
-): IssueEngagement | null => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-
-    if (!stored) return null;
-
-    const parsed: unknown = JSON.parse(stored);
-
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      Array.isArray(parsed)
-    ) {
-      return null;
-    }
-
-    const engagement = (parsed as EngagementStorage)[String(issueId)];
-
-    if (!engagement || typeof engagement !== "object") {
-      return null;
-    }
-
-    if (
-      !Array.isArray(engagement.comments) ||
-      typeof engagement.isLiked !== "boolean"
-    ) {
-      return null;
-    }
-
-    return engagement;
-  } catch {
-    return null;
-  }
-};
 
 // API 상태 → 화면 상태 변환
 const STATUS_LABELS: Record<ReportApiStatus, CampusIssue["status"]> = {
@@ -81,10 +33,15 @@ export default function Home() {
   // 캠퍼스 문제 현황 필터
   const [selectedFilter, setSelectedFilter] = useState<IssueFilter>("전체");
 
-  // 전체 제보 목록 (기존 홈 카드 데이터)
+  // 전체 제보 목록
   const [serverReports, setServerReports] = useState<ReportListItem[]>([]);
   const [isLoadingReports, setIsLoadingReports] = useState(true);
   const [reportsError, setReportsError] = useState("");
+
+  // 제보별 댓글 개수
+  const [commentCounts, setCommentCounts] = useState<Record<number, number>>(
+    {},
+  );
 
   // AI 문제 그룹 목록 (상태별 숫자 계산 전용)
   const [issueGroups, setIssueGroups] = useState<IssueGroup[]>([]);
@@ -94,7 +51,7 @@ export default function Home() {
   const [isLoadingMyReports, setIsLoadingMyReports] = useState(true);
   const [myReportsError, setMyReportsError] = useState("");
 
-  // 전체 제보 목록 조회 (기존 홈 카드 유지)
+  // 전체 제보 목록 조회
   useEffect(() => {
     let active = true;
 
@@ -108,7 +65,9 @@ export default function Home() {
         if (!active) return;
 
         if (!response.success || !Array.isArray(response.data)) {
-          throw new Error(response.message || "제보 목록 조회에 실패했습니다.");
+          throw new Error(
+            response.message || "제보 목록 조회에 실패했습니다.",
+          );
         }
 
         setServerReports(response.data);
@@ -123,7 +82,9 @@ export default function Home() {
             : "제보 목록을 불러오지 못했습니다.",
         );
       } finally {
-        if (active) setIsLoadingReports(false);
+        if (active) {
+          setIsLoadingReports(false);
+        }
       }
     };
 
@@ -134,7 +95,59 @@ export default function Home() {
     };
   }, []);
 
-  // AI 문제 그룹 목록 조회 (상태별 숫자 계산 전용)
+  // 각 제보의 댓글 개수 조회
+  useEffect(() => {
+    if (serverReports.length === 0) {
+      setCommentCounts({});
+      return;
+    }
+
+    let active = true;
+
+    const fetchCommentCounts = async () => {
+      const results = await Promise.allSettled(
+        serverReports.map(async (report) => {
+          const response = await getComments(report.id);
+
+          if (!response.success || !Array.isArray(response.data)) {
+            throw new Error(
+              response.message || "댓글 조회에 실패했습니다.",
+            );
+          }
+
+          return {
+            id: report.id,
+            count: response.data.length,
+          };
+        }),
+      );
+
+      if (!active) return;
+
+      const nextCounts: Record<number, number> = {};
+
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          nextCounts[result.value.id] = result.value.count;
+        } else {
+          console.error(
+            `제보 ${serverReports[index].id} 댓글 개수 조회 실패:`,
+            result.reason,
+          );
+        }
+      });
+
+      setCommentCounts(nextCounts);
+    };
+
+    void fetchCommentCounts();
+
+    return () => {
+      active = false;
+    };
+  }, [serverReports]);
+
+  // AI 문제 그룹 목록 조회
   useEffect(() => {
     let active = true;
 
@@ -210,10 +223,9 @@ export default function Home() {
     .slice(0, 2);
 
   // 서버 제보 데이터 → 기존 카드 UI 데이터 변환
-  // 기존 홈 카드 내용은 변경하지 않음
-  const syncedCampusIssues: CampusIssue[] = serverReports.map((report) => {
-    const engagement = getStoredEngagement(report.id);
-
+  const syncedCampusIssues: (CampusIssue & {
+    commentCount?: number;
+  })[] = serverReports.map((report) => {
     return {
       id: report.id,
       building: "",
@@ -229,12 +241,12 @@ export default function Home() {
       status: STATUS_LABELS[report.status],
       relatedReports: 1,
       likes: report.likeCount,
-      comments: engagement?.comments ?? [],
+      comments: [],
+      commentCount: commentCounts[report.id],
     };
   });
 
   // 상태별 개수 계산을 위한 문제 그룹 데이터
-  // 홈 카드 데이터와 별도로 사용
   const issueCountItems: CampusIssue[] = issueGroups.map((group) => {
     return {
       id: group.id,
@@ -359,7 +371,7 @@ export default function Home() {
             />
           </div>
 
-          {/* 문제 현황 카드 목록: 기존 데이터 유지 */}
+          {/* 문제 현황 카드 목록 */}
           <div className="mt-3 flex flex-col gap-[10px]">
             {isLoadingReports ? (
               <p className="py-8 text-center text-sm text-[#727070]">

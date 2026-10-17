@@ -106,6 +106,10 @@ export interface ReportDetail {
   photoUrl: string | null;
   status: ReportApiStatus;
   likeCount: number;
+
+  // 로그인한 사용자의 공감 여부
+  liked: boolean;
+
   resolveContent: string | null;
   resolvedAt: string | null;
   createdAt: string;

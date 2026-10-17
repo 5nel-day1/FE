@@ -35,3 +35,31 @@ export interface SignupResponse {
   message: string;
   data: SignupData;
 }
+
+// 학생 로그인 요청
+export interface StudentLoginRequest {
+  studentId: string;
+  password: string;
+}
+
+// 관리자 로그인 요청
+export interface AdminLoginRequest {
+  adminCode: string;
+  password: string;
+}
+
+// 로그인 성공 응답 데이터
+export interface LoginResponseData {
+  id: number;
+  name: string;
+  role: "STUDENT" | "ADMIN";
+  accessToken: string;
+}
+
+// 로그인 API 응답
+export interface LoginResponse {
+  success: boolean;
+  code: number;
+  message: string;
+  data: LoginResponseData;
+}

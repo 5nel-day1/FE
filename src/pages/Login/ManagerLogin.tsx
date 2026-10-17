@@ -1,18 +1,83 @@
+import { useState } from "react";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
+
 import logo from "../../assets/icons/sku_logo.png";
 import Button from "../../components/common/button/Button";
 
-import { useNavigate } from "react-router-dom";
+import { loginAdmin } from "../../api/auth";
+import { useAuthStore } from "../../stores/useAuthStore";
 
-export default function Login() {
+export default function ManagerLogin() {
   const navigate = useNavigate();
+
+  const saveLogin = useAuthStore((state) => state.login);
+
+  const [adminCode, setAdminCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+
+  // 관리자 로그인
+  const handleLogin = async () => {
+    if (isSubmitting) return;
+
+    // 필수 입력값 검증
+    if (!adminCode.trim()) {
+      setToastMessage("관리자 코드를 입력해 주세요.");
+      return;
+    }
+
+    if (!password) {
+      setToastMessage("비밀번호를 입력해 주세요.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setToastMessage("");
+
+    try {
+      const response = await loginAdmin({
+        adminCode: adminCode.trim(),
+        password,
+      });
+
+      if (!response.success || response.data?.role !== "ADMIN") {
+        setToastMessage(response.message || "관리자 로그인에 실패했습니다.");
+        return;
+      }
+
+      // 로그인 정보 저장
+      saveLogin(response.data);
+
+      // 관리자 대시보드로 이동
+      navigate("/admin/dashboard");
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        setToastMessage(
+          error.response?.data?.message ||
+            "로그인에 실패했습니다. 다시 시도해 주세요.",
+        );
+      } else {
+        setToastMessage("로그인 중 오류가 발생했습니다.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen w-full flex flex-col items-center px-5 py-10">
       {/* 로고 */}
-      <img src={logo} className="mt-20 sm:mt-10 max-w-full h-auto" />
+      <img
+        src={logo}
+        alt="서경대학교 로고"
+        className="mt-20 sm:mt-10 max-w-full h-auto"
+      />
 
       {/* 서비스명 + 한 줄 소개 */}
       <div className="text-black text-3xl font-extrabold mt-[13px]">CatchU</div>
+
       <div className="text-[#727070] text-sm font-medium mt-[9px]">
         서경대학교 캠퍼스 시설 · 위생 제보
       </div>
@@ -33,11 +98,16 @@ export default function Login() {
         </div>
       </div>
 
-      {/* 관리자 ID 입력 */}
+      {/* 관리자 코드 입력 */}
       <div className="w-full max-w-[339px] h-21 p-1 flex flex-col justify-start items-start gap-2 mt-[27px]">
         <p className="text-[#727070] text-sm font-semibold">관리자 코드</p>
+
         <input
-          className="w-[331px] h-[50px] pl-[10px] bg-white rounded-[10px] outline-1 outline-[#D9D9D9] text-[#999292] text-sm -font-medium"
+          type="text"
+          value={adminCode}
+          onChange={(e) => setAdminCode(e.target.value)}
+          autoComplete="username"
+          className="w-[331px] h-[50px] pl-[10px] bg-white rounded-[10px] outline-1 outline-[#D9D9D9] text-black text-sm font-medium"
           placeholder="예: 0000"
         />
       </div>
@@ -45,9 +115,18 @@ export default function Login() {
       {/* 비밀번호 입력 */}
       <div className="w-full max-w-[339px] h-21 p-1 flex flex-col justify-start items-start gap-2 mt-[18px]">
         <p className="text-[#727070] text-sm font-semibold">비밀번호</p>
+
         <input
           type="password"
-          className="w-[331px] h-[50px] pl-[10px] bg-white rounded-[10px] outline-1 outline-[#D9D9D9] text-[#999292] text-sm -font-medium"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              void handleLogin();
+            }
+          }}
+          autoComplete="current-password"
+          className="w-[331px] h-[50px] pl-[10px] bg-white rounded-[10px] outline-1 outline-[#D9D9D9] text-black text-sm font-medium"
           placeholder="비밀번호를 입력해주세요."
         />
       </div>
@@ -55,14 +134,33 @@ export default function Login() {
       {/* 회원가입 */}
       <div className="flex gap-[3px] mt-[14px] mb-[118px]">
         <p className="text-[#999292] text-xs font-medium">계정이 없으신가요?</p>
+
         <a href="/signup" className="text-[#3B8519] text-xs font-semibold">
           회원가입
         </a>
       </div>
 
-      <div className="w-[339px]">
-        <Button title="로그인" onClick={() => navigate("/admin/dashboard")}/>
+      {/* 로그인 버튼 */}
+      <div
+        className={`w-[339px] ${
+          isSubmitting ? "opacity-60 pointer-events-none" : ""
+        }`}
+      >
+        <Button
+          title={isSubmitting ? "로그인 중..." : "로그인"}
+          onClick={() => void handleLogin()}
+        />
       </div>
+
+      {/* 오류 토스트 */}
+      {toastMessage && (
+        <div
+          role="alert"
+          className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-[#13213C] px-5 py-3 text-sm text-white shadow-lg whitespace-nowrap"
+        >
+          {toastMessage}
+        </div>
+      )}
     </div>
   );
 }

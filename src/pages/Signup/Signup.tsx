@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
+
+import { signupStudent, signupAdmin } from "../../api/auth";
 
 import CommonHeader from "../../components/common/CommonHeader/CommonHeader";
 import backButton from "../../assets/images/back_button.png";
@@ -34,9 +37,7 @@ function Option({ role, text, selected, onSelect }: OptionProps) {
         {role}
       </p>
 
-      <p className="text-xs text-[#727070] font-medium">
-        {text}
-      </p>
+      <p className="text-xs text-[#727070] font-medium">{text}</p>
     </button>
   );
 }
@@ -61,10 +62,16 @@ export default function Signup() {
   // 토스트
   const [toastMessage, setToastMessage] = useState("");
 
+  // API 요청 상태
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [signupSucceeded, setSignupSucceeded] = useState(false);
+
   const isAdmin = selectedRole === "관리자";
 
   // 가입 유형 변경
   const handleRoleSelect = (role: UserRole) => {
+    if (isSubmitting || signupSucceeded) return;
+
     setSelectedRole(role);
 
     // 유형별 입력값 초기화
@@ -76,7 +83,9 @@ export default function Signup() {
   };
 
   // 회원가입
-  const handleSignup = () => {
+  const handleSignup = async () => {
+    if (isSubmitting || signupSucceeded) return;
+
     // 가입 유형 확인
     if (!selectedRole) {
       setToastMessage("가입 유형을 선택해 주세요.");
@@ -97,10 +106,7 @@ export default function Signup() {
     }
 
     // 학생 이메일 형식 확인
-    if (
-      selectedRole === "학생" &&
-      !/^[^\s@]+$/.test(contact.trim())
-    ) {
+    if (selectedRole === "학생" && !/^[^\s@]+$/.test(contact.trim())) {
       setToastMessage("학교 이메일 아이디를 올바르게 입력해 주세요.");
       return;
     }
@@ -120,9 +126,7 @@ export default function Signup() {
       !/[A-Za-z]/.test(password) ||
       !/\d/.test(password)
     ) {
-      setToastMessage(
-        "비밀번호는 8자 이상이며 영문과 숫자를 포함해야 합니다."
-      );
+      setToastMessage("비밀번호는 8자 이상이며 영문과 숫자를 포함해야 합니다.");
       return;
     }
 
@@ -138,42 +142,81 @@ export default function Signup() {
       return;
     }
 
-    // 회원가입 완료
-    setToastMessage(
-      "회원가입이 완료되었습니다. 로그인 페이지로 이동합니다."
-    );
+    setIsSubmitting(true);
+    setToastMessage("");
+
+    try {
+      const commonData = {
+        name: name.trim(),
+        department: department.trim(),
+        password,
+        passwordConfirm,
+        termsAgreed: agreed,
+      };
+
+      // 학생 / 관리자 회원가입 API 구분
+      const response =
+        selectedRole === "학생"
+          ? await signupStudent({
+              ...commonData,
+              studentId: identifier.trim(),
+              email: `${contact.trim()}@skuniv.ac.kr`,
+            })
+          : await signupAdmin({
+              ...commonData,
+              adminCode: identifier.trim(),
+              phoneNumber: contact.trim(),
+            });
+
+      if (!response.success) {
+        setToastMessage(response.message || "회원가입에 실패했습니다.");
+        return;
+      }
+
+      // 회원가입 성공
+      setSignupSucceeded(true);
+      setToastMessage("회원가입이 완료되었습니다. 로그인 페이지로 이동합니다.");
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        const message = error.response?.data?.message;
+
+        setToastMessage(
+          typeof message === "string" && message.trim()
+            ? message
+            : "회원가입 요청에 실패했습니다. 다시 시도해 주세요.",
+        );
+      } else {
+        setToastMessage("회원가입 중 오류가 발생했습니다.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // 토스트 메시지
+  // 토스트 메시지 및 회원가입 성공 후 이동
   useEffect(() => {
     if (!toastMessage) return;
 
-    const isSuccess = toastMessage.startsWith(
-      "회원가입이 완료되었습니다."
-    );
-
     const timer = window.setTimeout(() => {
-      if (isSuccess) {
-        navigate("/");
+      if (signupSucceeded) {
+        // 학생과 관리자 로그인 페이지 구분
+        navigate(selectedRole === "관리자" ? "/admin/login" : "/");
       } else {
         setToastMessage("");
       }
     }, 1800);
 
     return () => window.clearTimeout(timer);
-  }, [toastMessage, navigate]);
+  }, [toastMessage, signupSucceeded, selectedRole, navigate]);
 
   return (
     <div className="flex flex-col min-h-screen bg-[#F5F6F3]">
       <CommonHeader img={backButton} title="회원가입" />
 
       <div className="flex w-full flex-col px-[21px] pb-10">
-
         {/* 가입 유형 */}
         <div className="w-full flex flex-col mt-[30px] gap-3">
-          <p className="text-black text-sm font-bold">
-            가입 유형
-          </p>
+          <p className="text-black text-sm font-bold">가입 유형</p>
 
           <div className="flex w-full gap-[19px]">
             <Option
@@ -194,9 +237,7 @@ export default function Signup() {
 
         {/* 이름 */}
         <div className="w-full flex flex-col gap-[5px] mt-[19px]">
-          <p className="text-[#727070] text-sm font-semibold">
-            이름
-          </p>
+          <p className="text-[#727070] text-sm font-semibold">이름</p>
 
           <input
             type="text"
@@ -221,9 +262,7 @@ export default function Signup() {
             onChange={(e) => setIdentifier(e.target.value)}
             required
             className="w-full h-[50px] bg-white rounded-[10px] outline-1 outline-[#D9D9D9] pl-[11px]"
-            placeholder={
-              isAdmin ? "예: 0000" : "예: 2023123456"
-            }
+            placeholder={isAdmin ? "예: 0000" : "예: 2023123456"}
           />
         </div>
 
@@ -240,11 +279,7 @@ export default function Signup() {
             onChange={(e) => setDepartment(e.target.value)}
             required
             className="w-full h-[50px] bg-white rounded-[10px] outline-1 outline-[#D9D9D9] pl-[11px]"
-            placeholder={
-              isAdmin
-                ? "예: 시설미화관리담당"
-                : "예: 컴퓨터공학과"
-            }
+            placeholder={isAdmin ? "예: 시설미화관리담당" : "예: 컴퓨터공학과"}
           />
         </div>
 
@@ -256,7 +291,6 @@ export default function Signup() {
 
           <div className="flex w-full gap-[9px]">
             <div className="flex min-w-0 flex-1 h-[50px] items-center bg-white rounded-[10px] outline-1 outline-[#D9D9D9] px-[11px]">
-
               {!isAdmin ? (
                 <>
                   {/* 학생 이메일 */}
@@ -302,9 +336,7 @@ export default function Signup() {
 
         {/* 비밀번호 */}
         <div className="w-full flex flex-col gap-[5px] mt-[5px]">
-          <p className="text-[#727070] text-sm font-semibold">
-            비밀번호
-          </p>
+          <p className="text-[#727070] text-sm font-semibold">비밀번호</p>
 
           <input
             type="password"
@@ -342,10 +374,19 @@ export default function Signup() {
 
         {/* 가입하기 버튼 */}
         <div
-          onClick={handleSignup}
-          className="flex w-full justify-center mx-auto"
+          className={`flex w-full justify-center mx-auto ${
+            isSubmitting || signupSucceeded
+              ? "pointer-events-none opacity-60"
+              : ""
+          }`}
         >
-          <Button title="가입하기" />
+          <div
+            onClick={handleSignup}
+            className="w-full"
+            aria-busy={isSubmitting}
+          >
+            <Button title={isSubmitting ? "가입 중..." : "가입하기"} />
+          </div>
         </div>
       </div>
 

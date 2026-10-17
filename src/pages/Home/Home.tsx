@@ -1,5 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
+import { getMyReports, getReports } from "../../api/reports";
+import { getIssueGroups } from "../../api/issueGroups";
+
+import type { ReportListItem, ReportApiStatus } from "../../types/report";
+import type { IssueGroup } from "../../types/issueGroup";
 
 import Footer from "../../components/footer/Footer";
 import Header from "../../components/header/Header";
@@ -13,16 +19,7 @@ import CampusIssueFilter, {
 } from "../../components/campus/CampusIssueFilter";
 import CampusIssueCard from "../../components/campus/CampusIssueCard";
 
-import { reports } from "../../mocks/reports";
-import { campusIssues } from "../../mocks/campusIssues";
-
-import { useIssueStore } from "../../stores/useIssueStore";
-import { useReportStore } from "../../stores/useReportStore";
-
-// ----------------------------------------
 // 댓글 및 공감 저장소
-// ----------------------------------------
-
 const STORAGE_KEY = "catch-u-issue-engagement-v1";
 
 interface IssueEngagement {
@@ -33,7 +30,6 @@ interface IssueEngagement {
 
 type EngagementStorage = Record<string, IssueEngagement>;
 
-// 특정 문제의 저장된 댓글 및 공감 정보 조회
 const getStoredEngagement = (
   issueId: string | number,
 ): IssueEngagement | null => {
@@ -71,108 +67,195 @@ const getStoredEngagement = (
   }
 };
 
+// API 상태 → 화면 상태 변환
+const STATUS_LABELS: Record<ReportApiStatus, CampusIssue["status"]> = {
+  RECEIVED: "접수",
+  CHECKING: "확인 중",
+  IN_PROGRESS: "처리 중",
+  RESOLVED: "해결 완료",
+};
+
 export default function Home() {
   const navigate = useNavigate();
-
-  // 관리자와 학생이 동일한 문제 상태 사용
-  const issues = useIssueStore((state) => state.issues);
-
-  // 학생이 새로 등록한 제보
-  const submittedReports = useReportStore((state) => state.reports);
 
   // 캠퍼스 문제 현황 필터
   const [selectedFilter, setSelectedFilter] = useState<IssueFilter>("전체");
 
-  // ----------------------------------------
-  // 진행 중인 내 제보
-  // ----------------------------------------
+  // 전체 제보 목록 (기존 홈 카드 데이터)
+  const [serverReports, setServerReports] = useState<ReportListItem[]>([]);
+  const [isLoadingReports, setIsLoadingReports] = useState(true);
+  const [reportsError, setReportsError] = useState("");
 
-  // 기존 목업 데이터 + 새로 등록한 제보
-  // 해결 완료된 제보 제외, 최신 2개 표시
-  const recentReports = [
-    ...submittedReports.map((report) => ({
-      ...report,
-      status: issues[report.issueId ?? report.id]?.status ?? report.status,
-    })),
+  // AI 문제 그룹 목록 (상태별 숫자 계산 전용)
+  const [issueGroups, setIssueGroups] = useState<IssueGroup[]>([]);
 
-    ...reports.map((report) => ({
-      ...report,
-      status: issues[report.issueId]?.status ?? report.status,
-    })),
-  ]
-    .filter((report) => report.status !== "해결 완료")
+  // 내 제보 목록
+  const [myReports, setMyReports] = useState<ReportListItem[]>([]);
+  const [isLoadingMyReports, setIsLoadingMyReports] = useState(true);
+  const [myReportsError, setMyReportsError] = useState("");
+
+  // 전체 제보 목록 조회 (기존 홈 카드 유지)
+  useEffect(() => {
+    let active = true;
+
+    const fetchReports = async () => {
+      setIsLoadingReports(true);
+      setReportsError("");
+
+      try {
+        const response = await getReports();
+
+        if (!active) return;
+
+        if (!response.success || !Array.isArray(response.data)) {
+          throw new Error(response.message || "제보 목록 조회에 실패했습니다.");
+        }
+
+        setServerReports(response.data);
+      } catch (error) {
+        if (!active) return;
+
+        setServerReports([]);
+
+        setReportsError(
+          error instanceof Error
+            ? error.message
+            : "제보 목록을 불러오지 못했습니다.",
+        );
+      } finally {
+        if (active) setIsLoadingReports(false);
+      }
+    };
+
+    void fetchReports();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // AI 문제 그룹 목록 조회 (상태별 숫자 계산 전용)
+  useEffect(() => {
+    let active = true;
+
+    const fetchIssueGroups = async () => {
+      try {
+        const response = await getIssueGroups();
+
+        if (!active) return;
+
+        if (response.success && Array.isArray(response.data)) {
+          setIssueGroups(response.data);
+        }
+      } catch (error) {
+        console.error("문제 그룹 상태별 건수 조회 실패:", error);
+      }
+    };
+
+    void fetchIssueGroups();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // 내 제보 목록 조회
+  useEffect(() => {
+    let active = true;
+
+    const fetchMyReports = async () => {
+      setIsLoadingMyReports(true);
+      setMyReportsError("");
+
+      try {
+        const response = await getMyReports();
+
+        if (!active) return;
+
+        if (!response.success || !Array.isArray(response.data)) {
+          throw new Error(
+            response.message || "내 제보 목록 조회에 실패했습니다.",
+          );
+        }
+
+        setMyReports(response.data);
+      } catch (error) {
+        if (!active) return;
+
+        setMyReports([]);
+
+        setMyReportsError(
+          error instanceof Error
+            ? error.message
+            : "내 제보 목록을 불러오지 못했습니다.",
+        );
+      } finally {
+        if (active) {
+          setIsLoadingMyReports(false);
+        }
+      }
+    };
+
+    void fetchMyReports();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // 진행 중인 내 제보: 해결 완료 제외, 최신순 2개
+  const recentReports = myReports
+    .filter((report) => report.status !== "RESOLVED")
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 2);
 
-  // ----------------------------------------
-  // 캠퍼스 문제 현황
-  // ----------------------------------------
-
-  // 기존 캠퍼스 문제 + 댓글 및 공감 동기화
-  const existingCampusIssues: CampusIssue[] = campusIssues.map((issue) => {
-    const engagement = getStoredEngagement(issue.id);
+  // 서버 제보 데이터 → 기존 카드 UI 데이터 변환
+  // 기존 홈 카드 내용은 변경하지 않음
+  const syncedCampusIssues: CampusIssue[] = serverReports.map((report) => {
+    const engagement = getStoredEngagement(report.id);
 
     return {
-      ...issue,
-
-      // 관리자 처리 상태
-      status: issues[issue.id]?.status ?? issue.status,
-
-      // 상세 페이지에서 작성한 댓글
-      comments: engagement?.comments ?? issue.comments,
-
-      // 상세 페이지에서 누른 공감
-      likes: issue.likes + (engagement?.isLiked ? 1 : 0),
+      id: report.id,
+      building: "",
+      floor: "",
+      space: report.title,
+      description: report.content,
+      detail: report.content,
+      aiSummary: "AI 분석 대기 중입니다.",
+      createdAt: report.createdAt,
+      dateLabel: report.createdAt.slice(0, 10),
+      imageUrl: report.photoUrl ?? "",
+      category: "제보",
+      status: STATUS_LABELS[report.status],
+      relatedReports: 1,
+      likes: report.likeCount,
+      comments: engagement?.comments ?? [],
     };
   });
 
-  // 기존 문제에 연결되지 않은 신규 제보
-  const newCampusIssues: CampusIssue[] = submittedReports
-    .filter((report) => report.issueId == null)
-    .map((report) => {
-      const engagement = getStoredEngagement(report.id);
+  // 상태별 개수 계산을 위한 문제 그룹 데이터
+  // 홈 카드 데이터와 별도로 사용
+  const issueCountItems: CampusIssue[] = issueGroups.map((group) => {
+    return {
+      id: group.id,
+      building: group.building,
+      floor: group.floor,
+      space: group.facility,
+      description: group.aiSummary,
+      detail: group.aiSummary,
+      aiSummary: group.aiSummary,
+      createdAt: "",
+      dateLabel: "",
+      imageUrl: "",
+      category: group.problemType,
+      status: STATUS_LABELS[group.status],
+      relatedReports: 0,
+      likes: 0,
+      comments: [],
+    };
+  });
 
-      return {
-        // 기존 CampusIssue 구조 기반
-        ...campusIssues[0],
-
-        id: report.id,
-
-        building: report.building,
-        floor: report.floor,
-        space: report.space,
-
-        description: report.description,
-        detail: report.description,
-        aiSummary: "AI 분석 대기 중입니다.",
-
-        createdAt: report.createdAt,
-        dateLabel: report.createdAt.slice(0, 10),
-
-        imageUrl: report.imageUrl ?? "",
-
-        category: "분석 대기",
-
-        // 관리자 처리 상태
-        status: issues[report.issueId ?? report.id]?.status ?? report.status,
-
-        relatedReports: 1,
-
-        // 상세 페이지에서 누른 공감
-        likes: engagement?.isLiked ? 1 : 0,
-
-        // 상세 페이지에서 작성한 댓글
-        comments: engagement?.comments ?? [],
-      };
-    });
-
-  // 기존 문제 + 신규 문제
-  const syncedCampusIssues: CampusIssue[] = [
-    ...newCampusIssues,
-    ...existingCampusIssues,
-  ];
-
-  // 선택한 상태에 따라 필터링
+  // 기존 카드 목록 필터링 유지
   const filteredIssues =
     selectedFilter === "전체"
       ? syncedCampusIssues
@@ -217,9 +300,20 @@ export default function Home() {
             </p>
           </div>
 
-          {/* 제보 목록 */}
+          {/* 내 제보 목록 */}
           <div className="w-full overflow-hidden rounded-[20px] border border-[#D9D9D9] bg-white">
-            {recentReports.length === 0 ? (
+            {isLoadingMyReports ? (
+              <p className="px-4 py-8 text-center text-sm text-[#727070]">
+                내 제보를 불러오는 중입니다.
+              </p>
+            ) : myReportsError ? (
+              <p
+                role="alert"
+                className="px-4 py-8 text-center text-sm text-red-600"
+              >
+                {myReportsError}
+              </p>
+            ) : recentReports.length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-[#727070]">
                 진행 중인 제보가 없습니다.
               </p>
@@ -227,26 +321,22 @@ export default function Home() {
               <ul className="divide-y divide-[#D9D9D9]">
                 {recentReports.map((report) => (
                   <li
-                    key={
-                      "receiptNumber" in report
-                        ? report.receiptNumber
-                        : `mock-${report.id}`
-                    }
+                    key={report.id}
                     className="flex min-w-0 items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5"
                   >
                     {/* 제보 장소 + 내용 */}
                     <div className="min-w-0 flex-1 gap-1">
                       <p className="text-sm font-semibold text-black sm:text-base lg:text-lg">
-                        {report.building} {report.floor} {report.space}
+                        {report.title}
                       </p>
 
                       <p className="text-xs font-medium text-[#B0B0B0] sm:text-sm lg:text-base">
-                        {report.description}
+                        {report.content}
                       </p>
                     </div>
 
                     {/* 제보 처리 상태 */}
-                    <ReportStatus status={report.status} />
+                    <ReportStatus status={STATUS_LABELS[report.status]} />
                   </li>
                 ))}
               </ul>
@@ -260,32 +350,46 @@ export default function Home() {
             캠퍼스 문제 현황
           </h2>
 
-          {/* 상태별 필터 */}
+          {/* 상태별 필터: 숫자만 문제 그룹 API 기준 */}
           <div className="mt-3">
             <CampusIssueFilter
-              issues={syncedCampusIssues}
+              issues={issueCountItems}
               selectedFilter={selectedFilter}
               onFilterChange={setSelectedFilter}
             />
           </div>
 
-          {/* 문제 현황 카드 목록 */}
+          {/* 문제 현황 카드 목록: 기존 데이터 유지 */}
           <div className="mt-3 flex flex-col gap-[10px]">
-            {filteredIssues.map((issue) => (
-              <button
-                key={issue.id}
-                type="button"
-                onClick={() => navigate(`/reports/${issue.id}`)}
-                className="block w-full cursor-pointer rounded-[20px] text-left"
-              >
-                <CampusIssueCard issue={issue} />
-              </button>
-            ))}
+            {isLoadingReports ? (
+              <p className="py-8 text-center text-sm text-[#727070]">
+                제보 목록을 불러오는 중입니다.
+              </p>
+            ) : reportsError ? (
+              <p role="alert" className="py-8 text-center text-sm text-red-600">
+                {reportsError}
+              </p>
+            ) : filteredIssues.length === 0 ? (
+              <p className="py-8 text-center text-sm text-[#727070]">
+                등록된 제보가 없습니다.
+              </p>
+            ) : (
+              filteredIssues.map((issue) => (
+                <button
+                  key={issue.id}
+                  type="button"
+                  onClick={() => navigate(`/reports/${issue.id}`)}
+                  className="block w-full cursor-pointer rounded-[20px] text-left"
+                >
+                  <CampusIssueCard issue={issue} />
+                </button>
+              ))
+            )}
           </div>
         </section>
 
         {/* 안내 문구 */}
-        <p className="mt-3 w-full text-xs leading-relaxed text-[#727070] sm:text-sm lg:text-base">
+        <p className="mt-3 w-full text-xs leading-relaxed text-[#727070] sm:text-sm sm:leading-relaxed lg:text-base">
           개별 제보 내용과 제보자 정보는 공개되지 않으며, 같은 문제로 묶인
           현황만 표시됩니다.
         </p>

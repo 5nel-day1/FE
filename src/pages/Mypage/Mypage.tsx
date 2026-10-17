@@ -1,19 +1,56 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+
 import ProfileCard from "../../components/myPage/ProfileCard";
 import ReportStatsCard from "../../components/myPage/ReportStatsCard";
 import NotificationToggle from "../../components/myPage/NotificationToggle";
 import AccountMenu from "../../components/myPage/AccountMenu";
+
 import { userProfile, notificationSettings } from "../../mocks/myPage";
+
 import Footer from "../../components/footer/Footer";
 
+import { logoutUser } from "../../api/auth";
+import { useAuthStore } from "../../stores/useAuthStore";
+
 export default function MyPage() {
+  const navigate = useNavigate();
+
   const [settings, setSettings] = useState(notificationSettings);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const logout = useAuthStore((state) => state.logout);
+
+  // 학생 로그아웃
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+
+    setIsLoggingOut(true);
+
+    try {
+      const response = await logoutUser();
+
+      if (!response.success) {
+        console.error("서버 로그아웃 실패:", response.message);
+      }
+    } catch (error) {
+      console.error("서버 로그아웃 요청 실패:", error);
+    } finally {
+      // 로그인 정보 초기화
+      logout();
+
+      // 학생 로그인 페이지로 이동
+      navigate("/", { replace: true });
+    }
+  };
 
   return (
     <main className="min-h-screen bg-[#F8F9F7] pb-[73px] px-5 py-5">
       <div className="w-full pb-5">
         {/* 페이지 제목 */}
-        <h1 className="mb-7 text-2xl font-bold text-[#13213C]">마이페이지</h1>
+        <h1 className="mb-7 text-2xl font-bold text-[#13213C]">
+          마이페이지
+        </h1>
 
         {/* 프로필 정보 */}
         <div className="mb-5">
@@ -27,7 +64,9 @@ export default function MyPage() {
 
         {/* 알림 설정 */}
         <section className="mb-8">
-          <h2 className="mb-4 text-lg font-bold text-[#13213C]">알림 설정</h2>
+          <h2 className="mb-4 text-lg font-bold text-[#13213C]">
+            알림 설정
+          </h2>
 
           <div className="overflow-hidden rounded-2xl border border-[#D9D9D9] bg-white">
             <NotificationToggle
@@ -74,18 +113,21 @@ export default function MyPage() {
 
         {/* 계정 관리 */}
         <section>
-          <h2 className="mb-4 text-lg font-bold text-[#13213C]">계정 관리</h2>
+          <h2 className="mb-4 text-lg font-bold text-[#13213C]">
+            계정 관리
+          </h2>
 
           <AccountMenu
-            onLogout={() =>
-              window.alert("로그아웃 기능은 추후 연동 예정입니다.")
-            }
+            onLogout={() => void handleLogout()}
+            isLoggingOut={isLoggingOut}
             onWithdraw={() =>
               window.alert("회원 탈퇴 기능은 추후 연동 예정입니다.")
             }
           />
         </section>
       </div>
+
+      {/* 하단 푸터 */}
       <div className="fixed bottom-0 left-0 z-50 w-full">
         <Footer />
       </div>

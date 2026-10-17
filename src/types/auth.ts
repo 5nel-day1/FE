@@ -63,3 +63,11 @@ export interface LoginResponse {
   message: string;
   data: LoginResponseData;
 }
+
+// 로그아웃 API 응답
+export interface LogoutResponse {
+  success: boolean;
+  code: number;
+  message: string;
+  data: string;
+}

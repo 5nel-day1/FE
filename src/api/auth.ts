@@ -4,6 +4,7 @@ import type {
   AdminLoginRequest,
   AdminSignupRequest,
   LoginResponse,
+  LogoutResponse,
   SignupResponse,
   StudentLoginRequest,
   StudentSignupRequest,
@@ -50,5 +51,11 @@ export const loginAdmin = async (
     "/api/auth/login/admin",
     data,
   );
+  return response.data;
+};
+
+// 로그아웃 (학생 및 관리자 공통)
+export const logoutUser = async (): Promise<LogoutResponse> => {
+  const response = await api.post<LogoutResponse>("/api/auth/logout");
   return response.data;
 };

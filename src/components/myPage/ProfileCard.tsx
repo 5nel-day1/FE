@@ -1,10 +1,16 @@
-import type { UserProfile } from "../../types/myPage";
-
 interface ProfileCardProps {
-  profile: UserProfile;
+  profile: {
+    name: string;
+    role: string;
+    department: string;
+    studentId: string;
+    email: string;
+  };
 }
 
-export default function ProfileCard({ profile }: ProfileCardProps) {
+export default function ProfileCard({
+  profile,
+}: ProfileCardProps) {
   return (
     <div className="flex w-full items-center gap-4 rounded-2xl border border-[#D9D9D9] bg-white p-5 sm:p-6">
       {/* 프로필 이미지 */}

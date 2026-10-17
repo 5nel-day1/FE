@@ -1,29 +1,140 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import ProfileCard from "../../components/myPage/ProfileCard";
 import ReportStatsCard from "../../components/myPage/ReportStatsCard";
 import NotificationToggle from "../../components/myPage/NotificationToggle";
 import AccountMenu from "../../components/myPage/AccountMenu";
-
-import { userProfile, notificationSettings } from "../../mocks/myPage";
-
 import Footer from "../../components/footer/Footer";
 
 import { logoutUser } from "../../api/auth";
+import {
+  getMyPage,
+  updateNotificationSettings,
+  withdrawUser,
+} from "../../api/users";
+
 import { useAuthStore } from "../../stores/useAuthStore";
+
+import type {
+  MyPageUser,
+  NotificationSettings,
+} from "../../types/user";
+
+type NotificationKey = keyof NotificationSettings;
 
 export default function MyPage() {
   const navigate = useNavigate();
-
-  const [settings, setSettings] = useState(notificationSettings);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-
   const logout = useAuthStore((state) => state.logout);
 
-  // 학생 로그아웃
+  const [userInfo, setUserInfo] = useState<MyPageUser | null>(null);
+
+  const [settings, setSettings] = useState<NotificationSettings>({
+    statusAlarm: false,
+    commentAlarm: false,
+    solvedAlarm: false,
+  });
+
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const [userError, setUserError] = useState("");
+
+  const [isUpdatingNotifications, setIsUpdatingNotifications] =
+    useState(false);
+
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+
+  // 마이페이지 정보 조회
+  useEffect(() => {
+    let active = true;
+
+    const fetchMyPage = async () => {
+      try {
+        const response = await getMyPage();
+
+        if (!active) return;
+
+        if (!response.success || !response.data) {
+          throw new Error(
+            response.message || "마이페이지 조회에 실패했습니다.",
+          );
+        }
+
+        const data = response.data;
+
+        setUserInfo(data);
+
+        setSettings({
+          statusAlarm: data.statusAlarm,
+          commentAlarm: data.commentAlarm,
+          solvedAlarm: data.solvedAlarm,
+        });
+      } catch (error) {
+        if (!active) return;
+
+        console.error("마이페이지 정보 조회 실패:", error);
+        setUserError("마이페이지 정보를 불러오지 못했습니다.");
+      } finally {
+        if (active) {
+          setIsLoadingUser(false);
+        }
+      }
+    };
+
+    void fetchMyPage();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // 알림 설정 변경
+  const handleNotificationChange = async (
+    key: NotificationKey,
+    checked: boolean,
+  ) => {
+    if (isUpdatingNotifications || !userInfo) return;
+
+    const nextSettings: NotificationSettings = {
+      ...settings,
+      [key]: checked,
+    };
+
+    setIsUpdatingNotifications(true);
+
+    try {
+      const response = await updateNotificationSettings(nextSettings);
+
+      if (!response.success) {
+        throw new Error(
+          response.message || "알림 설정 변경에 실패했습니다.",
+        );
+      }
+
+      setSettings(nextSettings);
+
+      setUserInfo((previous) =>
+        previous
+          ? {
+              ...previous,
+              ...nextSettings,
+            }
+          : previous,
+      );
+    } catch (error) {
+      console.error("알림 설정 변경 실패:", error);
+
+      window.alert(
+        "알림 설정을 변경하지 못했습니다. 다시 시도해 주세요.",
+      );
+    } finally {
+      setIsUpdatingNotifications(false);
+    }
+  };
+
+  // 로그아웃
   const handleLogout = async () => {
-    if (isLoggingOut) return;
+    if (isLoggingOut || isWithdrawing) return;
 
     setIsLoggingOut(true);
 
@@ -36,13 +147,55 @@ export default function MyPage() {
     } catch (error) {
       console.error("서버 로그아웃 요청 실패:", error);
     } finally {
-      // 로그인 정보 초기화
       logout();
-
-      // 학생 로그인 페이지로 이동
       navigate("/", { replace: true });
     }
   };
+
+  // 회원 탈퇴
+  const handleWithdraw = async () => {
+    if (isWithdrawing || isLoggingOut) return;
+
+    const confirmed = window.confirm(
+      "정말 회원 탈퇴하시겠습니까?\n탈퇴 후에는 계정을 복구할 수 없습니다.",
+    );
+
+    if (!confirmed) return;
+
+    setIsWithdrawing(true);
+
+    try {
+      const response = await withdrawUser();
+
+      if (!response.success) {
+        throw new Error(
+          response.message || "회원 탈퇴에 실패했습니다.",
+        );
+      }
+
+      window.alert("회원 탈퇴가 완료되었습니다.");
+
+      // 로그인 정보 삭제
+      logout();
+
+      // 로그인 페이지 이동
+      navigate("/", { replace: true });
+    } catch (error) {
+      console.error("회원 탈퇴 실패:", error);
+
+      window.alert(
+        "회원 탈퇴에 실패했습니다. 다시 시도해 주세요.",
+      );
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
+
+  const notificationsDisabled =
+    isLoadingUser ||
+    !userInfo ||
+    isUpdatingNotifications ||
+    isWithdrawing;
 
   return (
     <main className="min-h-screen bg-[#F8F9F7] pb-[73px] px-5 py-5">
@@ -54,12 +207,44 @@ export default function MyPage() {
 
         {/* 프로필 정보 */}
         <div className="mb-5">
-          <ProfileCard profile={userProfile} />
+          {isLoadingUser ? (
+            <p className="py-5 text-sm text-[#777777]">
+              회원 정보를 불러오는 중입니다.
+            </p>
+          ) : userInfo ? (
+            <ProfileCard
+              profile={{
+                name: userInfo.name,
+                role:
+                  userInfo.role === "STUDENT"
+                    ? "학생"
+                    : userInfo.role === "ADMIN"
+                      ? "관리자"
+                      : userInfo.role,
+                department: userInfo.department,
+                studentId: userInfo.studentId,
+                email: userInfo.email,
+              }}
+            />
+          ) : (
+            <p className="py-5 text-sm text-red-600">
+              {userError}
+            </p>
+          )}
         </div>
 
         {/* 내 제보 통계 */}
         <div className="mb-8">
-          <ReportStatsCard />
+          {userInfo ? (
+            <ReportStatsCard
+              totalReports={userInfo.totalReports}
+              solvedReports={userInfo.solvedReports}
+            />
+          ) : isLoadingUser ? (
+            <p className="py-5 text-sm text-[#777777]">
+              제보 통계를 불러오는 중입니다.
+            </p>
+          ) : null}
         </div>
 
         {/* 알림 설정 */}
@@ -72,12 +257,13 @@ export default function MyPage() {
             <NotificationToggle
               title="처리 상태 변경"
               description="내 제보의 상태가 바뀌면 알립니다."
-              checked={settings.statusChange}
+              checked={settings.statusAlarm}
+              disabled={notificationsDisabled}
               onChange={(checked) =>
-                setSettings((prev) => ({
-                  ...prev,
-                  statusChange: checked,
-                }))
+                void handleNotificationChange(
+                  "statusAlarm",
+                  checked,
+                )
               }
             />
 
@@ -86,12 +272,13 @@ export default function MyPage() {
             <NotificationToggle
               title="댓글"
               description="내가 공감하고 제보한 문제에 댓글이 달리면 알립니다."
-              checked={settings.comment}
+              checked={settings.commentAlarm}
+              disabled={notificationsDisabled}
               onChange={(checked) =>
-                setSettings((prev) => ({
-                  ...prev,
-                  comment: checked,
-                }))
+                void handleNotificationChange(
+                  "commentAlarm",
+                  checked,
+                )
               }
             />
 
@@ -100,12 +287,13 @@ export default function MyPage() {
             <NotificationToggle
               title="해결 소식"
               description="캠퍼스 문제가 해결되면 알립니다."
-              checked={settings.resolution}
+              checked={settings.solvedAlarm}
+              disabled={notificationsDisabled}
               onChange={(checked) =>
-                setSettings((prev) => ({
-                  ...prev,
-                  resolution: checked,
-                }))
+                void handleNotificationChange(
+                  "solvedAlarm",
+                  checked,
+                )
               }
             />
           </div>
@@ -119,10 +307,8 @@ export default function MyPage() {
 
           <AccountMenu
             onLogout={() => void handleLogout()}
-            isLoggingOut={isLoggingOut}
-            onWithdraw={() =>
-              window.alert("회원 탈퇴 기능은 추후 연동 예정입니다.")
-            }
+            isLoggingOut={isLoggingOut || isWithdrawing}
+            onWithdraw={() => void handleWithdraw()}
           />
         </section>
       </div>

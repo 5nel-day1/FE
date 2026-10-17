@@ -39,21 +39,38 @@ const STATUS_LABELS: Record<
 };
 
 // 이미지 URL 변환
-// 상대 경로로 전달된 이미지는 백엔드 서버 주소를 붙여 사용
 const getImageUrl = (photoUrl: string | null): string => {
-  if (!photoUrl) return "";
+  if (!photoUrl?.trim()) return "";
 
-  // 이미 완전한 URL이라면 그대로 사용
-  if (/^https?:\/\//i.test(photoUrl)) {
-    return photoUrl;
-  }
-
-  // 상대 경로라면 백엔드 서버 주소 추가
   const baseURL =
     import.meta.env.VITE_API_BASE_URL ||
     "https://api.juhee03.shop";
 
-  return new URL(photoUrl, baseURL).toString();
+  const normalizedBaseURL = baseURL.endsWith("/")
+    ? baseURL
+    : `${baseURL}/`;
+
+  try {
+    const url = new URL(photoUrl.trim(), normalizedBaseURL);
+
+    // localhost 주소로 전달된 이미지는 배포 서버 주소로 변환
+    if (
+      url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1"
+    ) {
+      const serverURL = new URL(normalizedBaseURL);
+
+      return new URL(
+        `${url.pathname}${url.search}${url.hash}`,
+        serverURL.origin,
+      ).toString();
+    }
+
+    return url.toString();
+  } catch {
+    console.error("잘못된 제보 이미지 URL:", photoUrl);
+    return "";
+  }
 };
 
 // 서버 제보 데이터 → 기존 상세 카드 데이터 변환
@@ -73,10 +90,14 @@ const toCampusIssue = (
     createdAt: data.createdAt,
     dateLabel: data.createdAt.slice(0, 10),
 
-    // 이미지 URL 변환 적용
+    // 이미지 URL 변환
     imageUrl: getImageUrl(data.photoUrl),
 
     status: STATUS_LABELS[data.status],
+
+    // 해결 완료 정보
+    resolvedAt: data.resolvedAt ?? undefined,
+    resolution: data.resolveContent ?? undefined,
 
     category: "제보",
 
@@ -163,7 +184,11 @@ export default function ReportDetail() {
           response.data,
         );
 
+        // 제보 정보 반영
         setReport(convertedReport);
+
+        // 서버에서 반환한 공감 여부 반영
+        setIsLiked(response.data.liked);
       } catch (caughtError: unknown) {
         if (!active) return;
 
@@ -195,13 +220,13 @@ export default function ReportDetail() {
     };
   }, [currentId]);
 
-  // 제보 변경 시 댓글과 공감 상태 초기화
+  // 제보 변경 시 댓글 상태 초기화
+  // 공감 여부는 서버 응답값을 사용하므로 초기화하지 않음
   useEffect(() => {
     if (!report) return;
 
     setComments([]);
     setMyCommentIds([]);
-    setIsLiked(false);
   }, [report?.id]);
 
   // 댓글 목록 조회 API
@@ -261,7 +286,7 @@ export default function ReportDetail() {
     return () => {
       active = false;
     };
-  }, [report, commentRefreshKey]);
+  }, [report?.id, commentRefreshKey]);
 
   // 댓글 작성 API
   const handleAddComment = async (content: string) => {

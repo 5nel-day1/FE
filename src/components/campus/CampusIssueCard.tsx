@@ -2,7 +2,7 @@ import type { CampusIssue } from "../../types/campusIssue";
 import ReportStatus from "../common/ReportStatus/ReportStatus";
 
 interface CampusIssueCardProps {
-  issue: CampusIssue;
+  issue: CampusIssue & { commentCount?: number };
   onClick?: (id: number) => void;
 }
 
@@ -42,7 +42,7 @@ export default function CampusIssueCard({
 
         <div className="flex shrink-0 items-center gap-2">
           <span>공감 {issue.likes}</span>
-          <span>댓글 {issue.comments.length}</span>
+          <span>댓글 {issue.commentCount ?? issue.comments.length}</span>
         </div>
       </div>
     </article>

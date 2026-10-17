@@ -1,64 +1,122 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 import MyReportCard from "../../components/myReport/MyReportCard";
 import Footer from "../../components/footer/Footer";
+import { getMyReports } from "../../api/reports";
 
-import { myReports } from "../../mocks/myReport";
-import { useReportStore } from "../../stores/useReportStore";
-import { useIssueStore } from "../../stores/useIssueStore";
+import type {
+  ReportApiStatus,
+  ReportListItem,
+  ReportStatus,
+} from "../../types/report";
+
+// 백엔드 상태 → 화면 상태 변환
+const STATUS_LABELS: Record<ReportApiStatus, ReportStatus> = {
+  RECEIVED: "접수",
+  CHECKING: "확인 중",
+  IN_PROGRESS: "처리 중",
+  RESOLVED: "해결 완료",
+};
 
 export default function MyReport() {
   const navigate = useNavigate();
 
-  // 학생이 새로 등록한 제보
-  const submittedReports = useReportStore((state) => state.reports);
+  const [reports, setReports] = useState<ReportListItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
-  // 관리자에서 변경한 문제 상태
-  const issues = useIssueStore((state) => state.issues);
+  // 내 제보 목록 조회
+  useEffect(() => {
+    let active = true;
 
-  // 기존 목업 데이터 + 새로 등록한 제보
-  const allReports = [
-    // 새로 등록한 제보
-    ...submittedReports.map((report) => ({
-      ...report,
-      sourceKey: `submitted-${report.id}`,
-      detailId: report.id,
+    const fetchMyReports = async () => {
+      setIsLoading(true);
+      setError("");
 
-      // 관리자 처리 상태 우선 적용
-      status:
-        issues[report.issueId ?? report.id]?.status ??
-        report.status,
-    })),
+      try {
+        const response = await getMyReports();
 
-    // 기존 목업 제보
-    ...myReports.map((report) => ({
-      ...report,
-      sourceKey: `mock-${report.id}`,
-      detailId: report.id,
+        if (!active) return;
 
-      // 기존 목업도 관리자 처리 상태 반영
-      status:
-        issues[report.issueId ?? report.id]?.status ??
-        report.status,
-    })),
-  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        if (!response.success || !Array.isArray(response.data)) {
+          throw new Error(
+            response.message || "내 제보 목록을 불러오지 못했습니다.",
+          );
+        }
+
+        // 최신순 정렬
+        setReports(
+          [...response.data].sort((a, b) =>
+            b.createdAt.localeCompare(a.createdAt),
+          ),
+        );
+      } catch (caughtError: unknown) {
+        if (!active) return;
+
+        setReports([]);
+
+        const apiMessage = axios.isAxiosError(caughtError)
+          ? caughtError.response?.data?.message
+          : undefined;
+
+        setError(
+          typeof apiMessage === "string" && apiMessage.trim()
+            ? apiMessage
+            : caughtError instanceof Error
+              ? caughtError.message
+              : "내 제보 목록을 불러오지 못했습니다.",
+        );
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void fetchMyReports();
+
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
 
   return (
     <div className="min-h-screen bg-[#F8F9F7] pb-[73px]">
       <main className="w-full px-5 py-8 sm:px-8 sm:py-10">
         {/* 페이지 제목 */}
         <div className="mb-7 flex items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold text-[#111827]">
-            내 제보
-          </h1>
+          <h1 className="text-2xl font-bold text-[#111827]">내 제보</h1>
 
           <span className="text-sm text-[#6B7280]">
-            총 {allReports.length}건
+            {isLoading ? "조회 중..." : `총 ${reports.length}건`}
           </span>
         </div>
 
         {/* 제보 목록 */}
-        {allReports.length === 0 ? (
+        {isLoading ? (
+          <div className="rounded-2xl border border-[#E5E7EB] bg-white px-5 py-16 text-center">
+            <p className="text-sm text-[#6B7280]">
+              내 제보를 불러오는 중입니다.
+            </p>
+          </div>
+        ) : error ? (
+          <div className="rounded-2xl border border-[#E5E7EB] bg-white px-5 py-16 text-center">
+            <p role="alert" className="text-sm text-red-600">
+              {error}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setReloadKey((key) => key + 1)}
+              className="mt-5 cursor-pointer rounded-xl bg-[#3B8519] px-6 py-3 text-sm font-semibold text-white"
+            >
+              다시 시도
+            </button>
+          </div>
+        ) : reports.length === 0 ? (
           <div className="rounded-2xl border border-[#E5E7EB] bg-white px-5 py-16 text-center">
             <p className="text-sm text-[#6B7280]">
               아직 등록한 제보가 없습니다.
@@ -74,26 +132,16 @@ export default function MyReport() {
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {allReports.map((report) => (
+            {reports.map((report) => (
               <MyReportCard
-                key={report.sourceKey}
-                building={report.building}
-                floor={report.floor}
-                space={report.space}
-                content={report.description}
-                status={report.status}
+                key={report.id}
+                building=""
+                floor=""
+                space={report.title}
+                content={report.content}
+                status={STATUS_LABELS[report.status] ?? "접수"}
                 createdAt={report.createdAt}
-                onClick={() =>
-                  navigate(`/my-report/${report.detailId}`, {
-                    state: {
-                      submittedReport: report.sourceKey.startsWith(
-                        "submitted-",
-                      )
-                        ? report
-                        : undefined,
-                    },
-                  })
-                }
+                onClick={() => navigate(`/my-report/${report.id}`)}
               />
             ))}
           </div>

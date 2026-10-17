@@ -3,6 +3,7 @@ interface NotificationToggleProps {
   description: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  disabled?: boolean;
 }
 
 export default function NotificationToggle({
@@ -10,6 +11,7 @@ export default function NotificationToggle({
   description,
   checked,
   onChange,
+  disabled = false,
 }: NotificationToggleProps) {
   return (
     <div className="flex w-full items-center justify-between gap-4 px-5 py-5 sm:px-6">
@@ -30,8 +32,9 @@ export default function NotificationToggle({
         role="switch"
         aria-label={`${title} 알림`}
         aria-checked={checked}
+        disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`relative h-10 w-[72px] shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${
+        className={`relative h-10 w-[72px] shrink-0 cursor-pointer rounded-full transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${
           checked ? "bg-[#3B8519]" : "bg-[#E5E5E5]"
         }`}
       >

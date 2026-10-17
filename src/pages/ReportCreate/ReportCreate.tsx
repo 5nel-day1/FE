@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 import BuildingSelector from "../../components/reportCreate/BuildingSelector";
 import FloorSelector from "../../components/reportCreate/FloorSelector";
@@ -8,13 +9,16 @@ import ReportLocationInput from "../../components/reportCreate/ReportLocationInp
 import ReportContentInput from "../../components/reportCreate/ReportContentInput";
 import ReportImageUpload from "../../components/reportCreate/ReportImageUpload";
 
-import { useReportStore } from "../../stores/useReportStore";
+import { createReport } from "../../api/reports";
 
 import type {
   ReportCreateForm,
   ReportSubmission,
 } from "../../types/reportCreate";
 
+import type { CreateReportRequest } from "../../types/report";
+
+// 초기 입력값
 const initialForm: ReportCreateForm = {
   building: "",
   floor: "",
@@ -23,36 +27,43 @@ const initialForm: ReportCreateForm = {
   image: null,
 };
 
-// 이미지 파일을 저장 가능한 문자열로 변환
-const fileToDataUrl = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+// 건물명 → 백엔드 Enum 코드
+const BUILDING_CODES: Record<string, string> = {
+  유담관: "YUDAM",
+  본관: "MAIN",
+  문예관: "MOONAE",
+  청운관: "CHEONGUN",
+  혜인관: "HEEIN",
+  북악관: "BUKGWAK",
+  은주1관: "EUNJU1",
+  한림관: "HANLIM",
+  수인관: "SUIN",
+  기타: "ETC",
+};
 
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-      } else {
-        reject(new Error("이미지 변환에 실패했습니다."));
-      }
-    };
-
-    reader.onerror = () => {
-      reject(new Error("이미지를 읽을 수 없습니다."));
-    };
-
-    reader.readAsDataURL(file);
-  });
+// 층 → 백엔드 Enum 코드
+const FLOOR_CODES: Record<string, string> = {
+  B1층: "B1",
+  "지하 1층": "B1",
+  "1층": "F1",
+  "2층": "F2",
+  "3층": "F3",
+  "4층": "F4",
+  "5층": "F5",
+  "6층": "F6",
+  "7층": "F7",
+  "8층": "F8",
+  기타: "ETC",
 };
 
 export default function ReportCreate() {
   const navigate = useNavigate();
 
-  const addReport = useReportStore((state) => state.addReport);
-
   const [form, setForm] = useState<ReportCreateForm>(initialForm);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 입력값 업데이트
   const updateForm = <K extends keyof ReportCreateForm>(
     key: K,
     value: ReportCreateForm[K],
@@ -65,13 +76,13 @@ export default function ReportCreate() {
     setError("");
   };
 
-  const handleSubmit = async (
-    event: FormEvent<HTMLFormElement>,
-  ) => {
+  // 제보 등록
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (isSubmitting) return;
 
+    // 필수 입력값 검증
     if (!form.building) {
       setError("건물을 선택해 주세요.");
       return;
@@ -92,40 +103,80 @@ export default function ReportCreate() {
       return;
     }
 
+    // 백엔드 Enum 코드 변환
+    const buildingCode = BUILDING_CODES[form.building];
+    const floorCode = FLOOR_CODES[form.floor];
+
+    if (!buildingCode || !floorCode) {
+      setError("건물 또는 층 선택값이 올바르지 않습니다.");
+      return;
+    }
+
     setIsSubmitting(true);
     setError("");
 
     try {
-      // 첨부한 사진을 Data URL로 변환
-      const imageUrl = form.image
-        ? await fileToDataUrl(form.image)
-        : undefined;
+      // 제보 등록 JSON 데이터
+      const reportData: CreateReportRequest = {
+        building: buildingCode,
+        floor: floorCode,
+        spaceDetail: form.space.trim(),
+        content: form.content.trim(),
+      };
 
-      // 이미지까지 포함하여 제보 저장
-      const createdReport = addReport({
-        userId: 1,
+      // FormData 생성
+      const formData = new FormData();
+
+      // data: JSON 객체
+      formData.append(
+        "data",
+        new Blob([JSON.stringify(reportData)], {
+          type: "application/json",
+        }),
+      );
+
+      // image: 이미지가 있을 때만 첨부
+      if (form.image) {
+        formData.append(
+          "image",
+          form.image,
+          form.image.name,
+        );
+      }
+
+      // 제보 등록 API 호출
+      const response = await createReport(formData);
+
+      // 등록 실패
+      if (!response.success || !response.data) {
+        setError(response.message || "제보 등록에 실패했습니다.");
+        return;
+      }
+
+      // 서버에서 반환한 접수번호 사용
+      const submission: ReportSubmission = {
+        receiptNumber: response.data.receiptNumber,
         building: form.building,
         floor: form.floor,
         space: form.space.trim(),
-        description: form.content.trim(),
-        issueId: null,
-        imageUrl,
-      });
-
-      const submission: ReportSubmission = {
-        receiptNumber: createdReport.receiptNumber,
-        building: createdReport.building,
-        floor: createdReport.floor,
-        space: createdReport.space,
-        content: createdReport.description,
+        content: form.content.trim(),
       };
 
+      // 제보 완료 페이지 이동
       navigate("/reports/complete", {
         state: { submission },
       });
-    } catch {
+    } catch (error: unknown) {
+      const message = axios.isAxiosError(error)
+        ? error.response?.data?.message
+        : undefined;
+
       setError(
-        "사진을 저장하지 못했습니다. 이미지 크기를 줄이거나 다시 첨부해 주세요.",
+        typeof message === "string" && message.trim()
+          ? message
+          : error instanceof Error
+            ? error.message
+            : "제보 등록에 실패했습니다. 잠시 후 다시 시도해 주세요.",
       );
     } finally {
       setIsSubmitting(false);
@@ -189,7 +240,8 @@ export default function ReportCreate() {
           {/* 문제 내용 */}
           <section className="mt-10">
             <h2 className="mb-4 text-lg font-bold text-[#111827]">
-              문제 내용 <span className="text-[#3B8519]">*</span>
+              문제 내용{" "}
+              <span className="text-[#3B8519]">*</span>
             </h2>
 
             <ReportContentInput

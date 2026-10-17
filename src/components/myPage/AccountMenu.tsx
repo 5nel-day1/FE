@@ -5,16 +5,19 @@ interface AccountMenuItem {
   path?: string;
   onClick?: () => void;
   danger?: boolean;
+  isLogout?: boolean;
 }
 
 interface AccountMenuProps {
   onLogout?: () => void;
   onWithdraw?: () => void;
+  isLoggingOut?: boolean;
 }
 
 export default function AccountMenu({
   onLogout,
   onWithdraw,
+  isLoggingOut = false,
 }: AccountMenuProps) {
   const navigate = useNavigate();
 
@@ -32,8 +35,9 @@ export default function AccountMenu({
       path: "/privacy",
     },
     {
-      label: "로그아웃",
+      label: isLoggingOut ? "로그아웃 중..." : "로그아웃",
       onClick: onLogout,
+      isLogout: true,
     },
     {
       label: "회원 탈퇴",
@@ -57,10 +61,11 @@ export default function AccountMenu({
     <section className="w-full overflow-hidden rounded-2xl border border-[#D9D9D9] bg-white">
       {menuItems.map((item, index) => (
         <button
-          key={item.label}
+          key={item.isLogout ? "logout" : item.label}
           type="button"
           onClick={() => handleMenuClick(item)}
-          className={`flex w-full cursor-pointer items-center justify-between px-5 py-5 text-left transition-colors hover:bg-[#F8F9F7] sm:px-6 ${
+          disabled={item.isLogout && isLoggingOut}
+          className={`flex w-full cursor-pointer items-center justify-between px-5 py-5 text-left transition-colors hover:bg-[#F8F9F7] disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 ${
             index !== menuItems.length - 1
               ? "border-b border-[#E5E7EB]"
               : ""

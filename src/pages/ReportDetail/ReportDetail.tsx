@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import axios from "axios";
 
 import ReportDetailCard from "../../components/reportDetail/ReportDetailCard";
 import ReportCommentList from "../../components/reportDetail/ReportCommentList";
@@ -8,291 +9,437 @@ import CommonHeader from "../../components/common/CommonHeader/CommonHeader";
 
 import backButton from "../../assets/images/back_button.png";
 
-import { campusIssues } from "../../mocks/campusIssues";
-import { useReportStore } from "../../stores/useReportStore";
-import { useIssueStore } from "../../stores/useIssueStore";
+import { getReportDetail } from "../../api/reports";
+import {
+  createComment,
+  deleteComment,
+  getComments,
+} from "../../api/comments";
+import { toggleReportLike } from "../../api/likes";
+
+import type {
+  ReportApiStatus,
+  ReportListItem,
+} from "../../types/report";
 
 import type {
   CampusIssue,
   CampusIssueComment,
 } from "../../types/campusIssue";
 
-// 댓글 및 공감 저장소
-const STORAGE_KEY = "catch-u-issue-engagement-v1";
+// 백엔드 상태 → 화면 상태 변환
+const STATUS_LABELS: Record<
+  ReportApiStatus,
+  CampusIssue["status"]
+> = {
+  RECEIVED: "접수",
+  CHECKING: "확인 중",
+  IN_PROGRESS: "처리 중",
+  RESOLVED: "해결 완료",
+};
 
-interface IssueEngagement {
-  comments: CampusIssueComment[];
-  myCommentIds: number[];
-  isLiked: boolean;
-}
+// 이미지 URL 변환
+const getImageUrl = (photoUrl: string | null): string => {
+  if (!photoUrl?.trim()) return "";
 
-type EngagementStorage = Record<string, IssueEngagement>;
+  const baseURL =
+    import.meta.env.VITE_API_BASE_URL ||
+    "https://api.juhee03.shop";
 
-// 저장된 전체 데이터 불러오기
-const getStoredEngagements = (): EngagementStorage => {
+  const normalizedBaseURL = baseURL.endsWith("/")
+    ? baseURL
+    : `${baseURL}/`;
+
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const url = new URL(photoUrl.trim(), normalizedBaseURL);
 
-    if (!stored) return {};
-
-    const parsed: unknown = JSON.parse(stored);
-
+    // localhost 주소로 전달된 이미지는 배포 서버 주소로 변환
     if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      Array.isArray(parsed)
+      url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1"
     ) {
-      return {};
+      const serverURL = new URL(normalizedBaseURL);
+
+      return new URL(
+        `${url.pathname}${url.search}${url.hash}`,
+        serverURL.origin,
+      ).toString();
     }
 
-    return parsed as EngagementStorage;
+    return url.toString();
   } catch {
-    return {};
+    console.error("잘못된 제보 이미지 URL:", photoUrl);
+    return "";
   }
 };
 
-// 특정 제보의 댓글 및 공감 데이터 불러오기
-const getIssueEngagement = (
-  issueId: string,
-  initialComments: CampusIssueComment[],
-): IssueEngagement => {
-  const stored = getStoredEngagements()[issueId];
-
-  if (!stored) {
-    return {
-      comments: initialComments,
-      myCommentIds: [],
-      isLiked: false,
-    };
-  }
-
+// 서버 제보 데이터 → 기존 상세 카드 데이터 변환
+const toCampusIssue = (
+  data: ReportListItem,
+): CampusIssue => {
   return {
-    comments: Array.isArray(stored.comments)
-      ? stored.comments
-      : initialComments,
-    myCommentIds: Array.isArray(stored.myCommentIds)
-      ? stored.myCommentIds
-      : [],
-    isLiked:
-      typeof stored.isLiked === "boolean"
-        ? stored.isLiked
-        : false,
+    id: data.id,
+
+    building: "",
+    floor: "",
+    space: data.title,
+
+    description: data.content,
+    detail: data.content,
+
+    createdAt: data.createdAt,
+    dateLabel: data.createdAt.slice(0, 10),
+
+    // 이미지 URL 변환
+    imageUrl: getImageUrl(data.photoUrl),
+
+    status: STATUS_LABELS[data.status],
+
+    // 해결 완료 정보
+    resolvedAt: data.resolvedAt ?? undefined,
+    resolution: data.resolveContent ?? undefined,
+
+    category: "제보",
+
+    relatedReports: 1,
+    likes: data.likeCount,
+    comments: [],
   };
-};
-
-// 특정 제보의 댓글 및 공감 데이터 저장하기
-const saveIssueEngagement = (
-  issueId: string,
-  engagement: IssueEngagement,
-) => {
-  try {
-    const stored = getStoredEngagements();
-
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        ...stored,
-        [issueId]: engagement,
-      }),
-    );
-  } catch (error) {
-    console.error("댓글 및 공감 저장 실패:", error);
-  }
 };
 
 export default function ReportDetail() {
-  const { id } = useParams<{ id: string }>();
+  // 두 라우트의 파라미터 이름 모두 지원
+  const { id, reportId } = useParams<{
+    id?: string;
+    reportId?: string;
+  }>();
 
-  // 신규 등록 제보 목록
-  const submittedReports = useReportStore(
-    (state) => state.reports,
+  const currentId = id ?? reportId ?? "";
+
+  // 제보 상세 정보
+  const [report, setReport] = useState<CampusIssue | null>(
+    null,
   );
 
-  // 관리자 처리 상태
-  const storedIssues = useIssueStore(
-    (state) => state.issues,
-  );
-
-  // 기존 목업 문제 조회
-  const existingIssue = campusIssues.find(
-    (issue) => String(issue.id) === id,
-  );
-
-  // 신규 등록 제보 조회
-  const submittedReport = submittedReports.find(
-    (report) => String(report.id) === id,
-  );
-
-  // 현재 문제 처리 상태
-  const issueStatus = existingIssue
-    ? storedIssues[existingIssue.id]?.status
-    : submittedReport
-      ? storedIssues[
-          submittedReport.issueId ?? submittedReport.id
-        ]?.status
-      : undefined;
-
-  // 기존 문제 또는 신규 제보 데이터 변환
-  const report = useMemo<CampusIssue | undefined>(() => {
-    // 기존 목업 문제
-    if (existingIssue) {
-      return {
-        ...existingIssue,
-        status: issueStatus ?? existingIssue.status,
-      };
-    }
-
-    // 신규 등록 제보
-    if (submittedReport) {
-      return {
-        id: submittedReport.id,
-        building: submittedReport.building,
-        floor: submittedReport.floor,
-        space: submittedReport.space,
-
-        description: submittedReport.description,
-        detail: submittedReport.description,
-        aiSummary: "AI 분석 대기 중입니다.",
-
-        createdAt: submittedReport.createdAt,
-        dateLabel: submittedReport.createdAt.slice(0, 10),
-
-        imageUrl: submittedReport.imageUrl ?? "",
-
-        status: issueStatus ?? submittedReport.status,
-        category: "분석 대기",
-
-        relatedReports: 1,
-        likes: 0,
-        comments: [],
-      };
-    }
-
-    return undefined;
-  }, [existingIssue, submittedReport, issueStatus]);
-
-  // 제보별 저장된 댓글 및 공감 정보
-  const initialEngagement = getIssueEngagement(
-    id ?? "",
-    report?.comments ?? [],
-  );
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
   // 댓글 목록
-  const [comments, setComments] = useState<CampusIssueComment[]>(
-    initialEngagement.comments,
-  );
+  const [comments, setComments] = useState<
+    CampusIssueComment[]
+  >([]);
 
   // 본인이 작성한 댓글 ID
-  const [myCommentIds, setMyCommentIds] = useState<number[]>(
-    initialEngagement.myCommentIds,
-  );
+  const [myCommentIds, setMyCommentIds] = useState<
+    number[]
+  >([]);
 
   // 공감 여부
-  const [isLiked, setIsLiked] = useState(
-    initialEngagement.isLiked,
-  );
+  const [isLiked, setIsLiked] = useState(false);
+  const [isTogglingLike, setIsTogglingLike] = useState(false);
 
-  // 다른 제보로 이동하면 해당 제보의 저장된 데이터 불러오기
+  // 댓글 작성 중 여부
+  const [isSubmittingComment, setIsSubmittingComment] =
+    useState(false);
+
+  // 댓글 목록 재조회용
+  const [commentRefreshKey, setCommentRefreshKey] =
+    useState(0);
+
+  // 제보 상세 조회 API
   useEffect(() => {
-    const stored = getIssueEngagement(
-      id ?? "",
-      report?.comments ?? [],
-    );
+    let active = true;
 
-    setComments(stored.comments);
-    setMyCommentIds(stored.myCommentIds);
-    setIsLiked(stored.isLiked);
-  }, [id]);
+    const numericId = Number(currentId);
 
-  // 댓글 등록
-  const handleAddComment = (content: string) => {
-    if (!id) return;
+    if (
+      !currentId ||
+      !Number.isSafeInteger(numericId) ||
+      numericId <= 0
+    ) {
+      setReport(null);
+      setError("올바르지 않은 제보 번호입니다.");
+      setIsLoading(false);
+      return;
+    }
 
-    const nextAnonymousNumber =
-      comments.reduce((max, comment) => {
-        const match = /^익명\s*(\d+)$/.exec(
-          comment.author,
+    setIsLoading(true);
+    setError("");
+    setReport(null);
+
+    const fetchReportDetail = async () => {
+      try {
+        const response = await getReportDetail(numericId);
+
+        if (!active) return;
+
+        if (!response.success || !response.data) {
+          throw new Error(
+            response.message ||
+              "제보 상세 조회에 실패했습니다.",
+          );
+        }
+
+        const convertedReport = toCampusIssue(
+          response.data,
         );
 
-        return match
-          ? Math.max(max, Number(match[1]))
-          : max;
-      }, 0) + 1;
+        // 제보 정보 반영
+        setReport(convertedReport);
 
-    const newComment: CampusIssueComment = {
-      id: Date.now(),
-      author: `익명 ${nextAnonymousNumber}`,
-      createdAt: new Date().toLocaleString("ko-KR"),
-      content,
+        // 서버에서 반환한 공감 여부 반영
+        setIsLiked(response.data.liked);
+      } catch (caughtError: unknown) {
+        if (!active) return;
+
+        const apiMessage = axios.isAxiosError(caughtError)
+          ? caughtError.response?.data?.message
+          : undefined;
+
+        setError(
+          typeof apiMessage === "string" &&
+            apiMessage.trim()
+            ? apiMessage
+            : caughtError instanceof Error
+              ? caughtError.message
+              : "제보 상세 정보를 불러오지 못했습니다.",
+        );
+
+        setReport(null);
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
+      }
     };
 
-    const nextComments = [...comments, newComment];
-    const nextMyCommentIds = [
-      ...myCommentIds,
-      newComment.id,
-    ];
+    void fetchReportDetail();
 
-    setComments(nextComments);
-    setMyCommentIds(nextMyCommentIds);
+    return () => {
+      active = false;
+    };
+  }, [currentId]);
 
-    saveIssueEngagement(id, {
-      comments: nextComments,
-      myCommentIds: nextMyCommentIds,
-      isLiked,
-    });
+  // 제보 변경 시 댓글 상태 초기화
+  // 공감 여부는 서버 응답값을 사용하므로 초기화하지 않음
+  useEffect(() => {
+    if (!report) return;
+
+    setComments([]);
+    setMyCommentIds([]);
+  }, [report?.id]);
+
+  // 댓글 목록 조회 API
+  useEffect(() => {
+    if (!report) return;
+
+    let active = true;
+
+    const fetchComments = async () => {
+      try {
+        const response = await getComments(
+          Number(report.id),
+        );
+
+        if (!active) return;
+
+        if (!response.success) {
+          throw new Error(
+            response.message ||
+              "댓글 목록 조회에 실패했습니다.",
+          );
+        }
+
+        // 서버 댓글을 기존 UI 타입으로 변환
+        const serverComments: CampusIssueComment[] =
+          response.data.map((comment) => ({
+            id: comment.commentId,
+            author: comment.anonymousName,
+            content: comment.content,
+            createdAt: comment.createdAt,
+          }));
+
+        // 댓글 목록 갱신
+        setComments(serverComments);
+
+        // 본인이 작성한 댓글만 삭제 버튼 표시
+        setMyCommentIds(
+          response.data
+            .filter((comment) => comment.myComment)
+            .map((comment) => comment.commentId),
+        );
+      } catch (caughtError) {
+        if (!active) return;
+
+        console.error(
+          "댓글 목록 조회 실패:",
+          caughtError,
+        );
+
+        setComments([]);
+        setMyCommentIds([]);
+      }
+    };
+
+    void fetchComments();
+
+    return () => {
+      active = false;
+    };
+  }, [report?.id, commentRefreshKey]);
+
+  // 댓글 작성 API
+  const handleAddComment = async (content: string) => {
+    if (!report || isSubmittingComment) return;
+
+    const trimmedContent = content.trim();
+
+    if (!trimmedContent) {
+      window.alert("댓글 내용을 입력해 주세요.");
+      return;
+    }
+
+    setIsSubmittingComment(true);
+
+    try {
+      await createComment(
+        Number(report.id),
+        trimmedContent,
+      );
+
+      // 등록 성공 후 댓글 목록 다시 조회
+      setCommentRefreshKey(
+        (previous) => previous + 1,
+      );
+    } catch (caughtError) {
+      console.error(
+        "댓글 작성 실패:",
+        caughtError,
+      );
+
+      window.alert(
+        "댓글 등록에 실패했습니다. 다시 시도해 주세요.",
+      );
+    } finally {
+      setIsSubmittingComment(false);
+    }
   };
 
-  // 본인 댓글 삭제
-  const handleDeleteComment = (commentId: number) => {
-    if (!id || !myCommentIds.includes(commentId)) return;
+  // 본인 댓글 삭제 API
+  const handleDeleteComment = async (
+    commentId: number,
+  ) => {
+    if (
+      !report ||
+      !myCommentIds.includes(commentId)
+    ) {
+      return;
+    }
 
-    const nextComments = comments.filter(
-      (comment) => comment.id !== commentId,
+    try {
+      await deleteComment(
+        Number(report.id),
+        commentId,
+      );
+
+      // 삭제 성공 후 댓글 목록 다시 조회
+      setCommentRefreshKey(
+        (previous) => previous + 1,
+      );
+    } catch (caughtError) {
+      console.error(
+        "댓글 삭제 실패:",
+        caughtError,
+      );
+
+      window.alert(
+        "댓글 삭제에 실패했습니다. 다시 시도해 주세요.",
+      );
+    }
+  };
+
+  // 공감 등록 및 취소 API
+  const handleToggleLike = async () => {
+    if (!report || isTogglingLike) return;
+
+    setIsTogglingLike(true);
+
+    try {
+      const response = await toggleReportLike(
+        Number(report.id),
+      );
+
+      if (!response.success) {
+        throw new Error(
+          response.message || "공감 처리에 실패했습니다.",
+        );
+      }
+
+      // 서버에서 반환한 공감 여부 반영
+      setIsLiked(response.data.liked);
+
+      // 서버에서 반환한 실제 공감 개수 반영
+      setReport((previous) =>
+        previous && previous.id === report.id
+          ? {
+              ...previous,
+              likes: response.data.likeCount,
+            }
+          : previous,
+      );
+    } catch (caughtError) {
+      console.error(
+        "공감 처리 실패:",
+        caughtError,
+      );
+
+      window.alert(
+        "공감 처리에 실패했습니다. 다시 시도해 주세요.",
+      );
+    } finally {
+      setIsTogglingLike(false);
+    }
+  };
+
+  // 로딩 중
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-[#F8F9F8]">
+        <CommonHeader
+          img={backButton}
+          title="문제 현황"
+        />
+
+        <div className="flex min-h-[60vh] items-center justify-center px-4">
+          <p className="text-sm text-[#555555]">
+            제보 상세 정보를 불러오는 중입니다.
+          </p>
+        </div>
+      </main>
     );
+  }
 
-    const nextMyCommentIds = myCommentIds.filter(
-      (commentIdValue) => commentIdValue !== commentId,
-    );
-
-    setComments(nextComments);
-    setMyCommentIds(nextMyCommentIds);
-
-    saveIssueEngagement(id, {
-      comments: nextComments,
-      myCommentIds: nextMyCommentIds,
-      isLiked,
-    });
-  };
-
-  // 공감 클릭 및 취소
-  const handleToggleLike = () => {
-    if (!id) return;
-
-    const nextIsLiked = !isLiked;
-
-    setIsLiked(nextIsLiked);
-
-    saveIssueEngagement(id, {
-      comments,
-      myCommentIds,
-      isLiked: nextIsLiked,
-    });
-  };
-
-  // 존재하지 않는 제보
+  // 제보 조회 실패
   if (!report) {
     return (
-      <main className="mx-auto flex min-h-[60vh] max-w-4xl flex-col items-center justify-center gap-4 px-4 text-center">
-        <p className="text-base text-[#555555]">
-          제보를 찾을 수 없습니다.
-        </p>
+      <main className="min-h-screen bg-[#F8F9F8]">
+        <CommonHeader
+          img={backButton}
+          title="문제 현황"
+        />
 
-        <Link
-          to="/home"
-          className="font-semibold text-[#3B8519] underline"
-        >
-          홈으로 돌아가기
-        </Link>
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+          <p className="text-base text-[#555555]">
+            {error || "제보를 찾을 수 없습니다."}
+          </p>
+
+          <Link
+            to="/home"
+            className="font-semibold text-[#3B8519] underline"
+          >
+            홈으로 돌아가기
+          </Link>
+        </div>
       </main>
     );
   }
@@ -301,7 +448,7 @@ export default function ReportDetail() {
   const currentReport: CampusIssue = {
     ...report,
     comments,
-    likes: report.likes + (isLiked ? 1 : 0),
+    likes: report.likes,
   };
 
   return (

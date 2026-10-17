@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import axios from "axios";
 
 import ReportDetailCard from "../../components/reportDetail/ReportDetailCard";
 import ReportCommentList from "../../components/reportDetail/ReportCommentList";
@@ -8,9 +9,12 @@ import CommonHeader from "../../components/common/CommonHeader/CommonHeader";
 
 import backButton from "../../assets/images/back_button.png";
 
-import { campusIssues } from "../../mocks/campusIssues";
-import { useReportStore } from "../../stores/useReportStore";
-import { useIssueStore } from "../../stores/useIssueStore";
+import { getReportDetail } from "../../api/reports";
+
+import type {
+  ReportApiStatus,
+  ReportListItem,
+} from "../../types/report";
 
 import type {
   CampusIssue,
@@ -28,7 +32,7 @@ interface IssueEngagement {
 
 type EngagementStorage = Record<string, IssueEngagement>;
 
-// 저장된 전체 데이터 불러오기
+// 저장된 전체 댓글 및 공감 데이터 불러오기
 const getStoredEngagements = (): EngagementStorage => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -70,9 +74,11 @@ const getIssueEngagement = (
     comments: Array.isArray(stored.comments)
       ? stored.comments
       : initialComments,
+
     myCommentIds: Array.isArray(stored.myCommentIds)
       ? stored.myCommentIds
       : [],
+
     isLiked:
       typeof stored.isLiked === "boolean"
         ? stored.isLiked
@@ -100,113 +106,165 @@ const saveIssueEngagement = (
   }
 };
 
+// 백엔드 상태 → 화면 상태 변환
+const STATUS_LABELS: Record<
+  ReportApiStatus,
+  CampusIssue["status"]
+> = {
+  RECEIVED: "접수",
+  CHECKING: "확인 중",
+  IN_PROGRESS: "처리 중",
+  RESOLVED: "해결 완료",
+};
+
+// 서버 제보 데이터 → 기존 상세 카드 데이터 변환
+const toCampusIssue = (
+  data: ReportListItem,
+): CampusIssue => {
+  return {
+    id: data.id,
+
+    building: "",
+    floor: "",
+    space: data.title,
+
+    description: data.content,
+    detail: data.content,
+
+    createdAt: data.createdAt,
+    dateLabel: data.createdAt.slice(0, 10),
+
+    imageUrl: data.photoUrl ?? "",
+
+    status: STATUS_LABELS[data.status],
+
+    category: "제보",
+
+    relatedReports: 1,
+    likes: data.likeCount,
+    comments: [],
+  };
+};
+
 export default function ReportDetail() {
-  const { id } = useParams<{ id: string }>();
+  // 두 라우트의 파라미터 이름 모두 지원
+  const { id, reportId } = useParams<{
+    id?: string;
+    reportId?: string;
+  }>();
 
-  // 신규 등록 제보 목록
-  const submittedReports = useReportStore(
-    (state) => state.reports,
+  const currentId = id ?? reportId ?? "";
+
+  // 제보 상세 정보
+  const [report, setReport] = useState<CampusIssue | null>(
+    null,
   );
 
-  // 관리자 처리 상태
-  const storedIssues = useIssueStore(
-    (state) => state.issues,
-  );
-
-  // 기존 목업 문제 조회
-  const existingIssue = campusIssues.find(
-    (issue) => String(issue.id) === id,
-  );
-
-  // 신규 등록 제보 조회
-  const submittedReport = submittedReports.find(
-    (report) => String(report.id) === id,
-  );
-
-  // 현재 문제 처리 상태
-  const issueStatus = existingIssue
-    ? storedIssues[existingIssue.id]?.status
-    : submittedReport
-      ? storedIssues[
-          submittedReport.issueId ?? submittedReport.id
-        ]?.status
-      : undefined;
-
-  // 기존 문제 또는 신규 제보 데이터 변환
-  const report = useMemo<CampusIssue | undefined>(() => {
-    // 기존 목업 문제
-    if (existingIssue) {
-      return {
-        ...existingIssue,
-        status: issueStatus ?? existingIssue.status,
-      };
-    }
-
-    // 신규 등록 제보
-    if (submittedReport) {
-      return {
-        id: submittedReport.id,
-        building: submittedReport.building,
-        floor: submittedReport.floor,
-        space: submittedReport.space,
-
-        description: submittedReport.description,
-        detail: submittedReport.description,
-        aiSummary: "AI 분석 대기 중입니다.",
-
-        createdAt: submittedReport.createdAt,
-        dateLabel: submittedReport.createdAt.slice(0, 10),
-
-        imageUrl: submittedReport.imageUrl ?? "",
-
-        status: issueStatus ?? submittedReport.status,
-        category: "분석 대기",
-
-        relatedReports: 1,
-        likes: 0,
-        comments: [],
-      };
-    }
-
-    return undefined;
-  }, [existingIssue, submittedReport, issueStatus]);
-
-  // 제보별 저장된 댓글 및 공감 정보
-  const initialEngagement = getIssueEngagement(
-    id ?? "",
-    report?.comments ?? [],
-  );
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
   // 댓글 목록
-  const [comments, setComments] = useState<CampusIssueComment[]>(
-    initialEngagement.comments,
-  );
+  const [comments, setComments] = useState<
+    CampusIssueComment[]
+  >([]);
 
   // 본인이 작성한 댓글 ID
-  const [myCommentIds, setMyCommentIds] = useState<number[]>(
-    initialEngagement.myCommentIds,
-  );
+  const [myCommentIds, setMyCommentIds] = useState<
+    number[]
+  >([]);
 
   // 공감 여부
-  const [isLiked, setIsLiked] = useState(
-    initialEngagement.isLiked,
-  );
+  const [isLiked, setIsLiked] = useState(false);
 
-  // 다른 제보로 이동하면 해당 제보의 저장된 데이터 불러오기
+  // 제보 상세 조회 API
   useEffect(() => {
+    let active = true;
+
+    const numericId = Number(currentId);
+
+    if (
+      !currentId ||
+      !Number.isSafeInteger(numericId) ||
+      numericId <= 0
+    ) {
+      setReport(null);
+      setError("올바르지 않은 제보 번호입니다.");
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError("");
+    setReport(null);
+
+    const fetchReportDetail = async () => {
+      try {
+        const response = await getReportDetail(numericId);
+
+        if (!active) return;
+
+        if (!response.success || !response.data) {
+          throw new Error(
+            response.message ||
+              "제보 상세 조회에 실패했습니다.",
+          );
+        }
+
+        const convertedReport = toCampusIssue(
+          response.data,
+        );
+
+        setReport(convertedReport);
+      } catch (caughtError: unknown) {
+        if (!active) return;
+
+        const apiMessage = axios.isAxiosError(caughtError)
+          ? caughtError.response?.data?.message
+          : undefined;
+
+        setError(
+          typeof apiMessage === "string" &&
+            apiMessage.trim()
+            ? apiMessage
+            : caughtError instanceof Error
+              ? caughtError.message
+              : "제보 상세 정보를 불러오지 못했습니다.",
+        );
+
+        setReport(null);
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void fetchReportDetail();
+
+    return () => {
+      active = false;
+    };
+  }, [currentId]);
+
+  // 제보 변경 시 저장된 댓글 및 공감 정보 불러오기
+  useEffect(() => {
+    if (!report) return;
+
     const stored = getIssueEngagement(
-      id ?? "",
-      report?.comments ?? [],
+      String(report.id),
+      report.comments,
     );
 
     setComments(stored.comments);
     setMyCommentIds(stored.myCommentIds);
     setIsLiked(stored.isLiked);
-  }, [id]);
+  }, [report]);
 
   // 댓글 등록
   const handleAddComment = (content: string) => {
-    if (!id) return;
+    if (!report) return;
+
+    const issueId = String(report.id);
 
     const nextAnonymousNumber =
       comments.reduce((max, comment) => {
@@ -227,6 +285,7 @@ export default function ReportDetail() {
     };
 
     const nextComments = [...comments, newComment];
+
     const nextMyCommentIds = [
       ...myCommentIds,
       newComment.id,
@@ -235,7 +294,7 @@ export default function ReportDetail() {
     setComments(nextComments);
     setMyCommentIds(nextMyCommentIds);
 
-    saveIssueEngagement(id, {
+    saveIssueEngagement(issueId, {
       comments: nextComments,
       myCommentIds: nextMyCommentIds,
       isLiked,
@@ -243,21 +302,30 @@ export default function ReportDetail() {
   };
 
   // 본인 댓글 삭제
-  const handleDeleteComment = (commentId: number) => {
-    if (!id || !myCommentIds.includes(commentId)) return;
+  const handleDeleteComment = (
+    commentId: number,
+  ) => {
+    if (
+      !report ||
+      !myCommentIds.includes(commentId)
+    ) {
+      return;
+    }
+
+    const issueId = String(report.id);
 
     const nextComments = comments.filter(
       (comment) => comment.id !== commentId,
     );
 
     const nextMyCommentIds = myCommentIds.filter(
-      (commentIdValue) => commentIdValue !== commentId,
+      (id) => id !== commentId,
     );
 
     setComments(nextComments);
     setMyCommentIds(nextMyCommentIds);
 
-    saveIssueEngagement(id, {
+    saveIssueEngagement(issueId, {
       comments: nextComments,
       myCommentIds: nextMyCommentIds,
       isLiked,
@@ -266,33 +334,60 @@ export default function ReportDetail() {
 
   // 공감 클릭 및 취소
   const handleToggleLike = () => {
-    if (!id) return;
+    if (!report) return;
+
+    const issueId = String(report.id);
 
     const nextIsLiked = !isLiked;
 
     setIsLiked(nextIsLiked);
 
-    saveIssueEngagement(id, {
+    saveIssueEngagement(issueId, {
       comments,
       myCommentIds,
       isLiked: nextIsLiked,
     });
   };
 
-  // 존재하지 않는 제보
+  // 로딩 중
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-[#F8F9F8]">
+        <CommonHeader
+          img={backButton}
+          title="문제 현황"
+        />
+
+        <div className="flex min-h-[60vh] items-center justify-center px-4">
+          <p className="text-sm text-[#555555]">
+            제보 상세 정보를 불러오는 중입니다.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  // 제보 조회 실패
   if (!report) {
     return (
-      <main className="mx-auto flex min-h-[60vh] max-w-4xl flex-col items-center justify-center gap-4 px-4 text-center">
-        <p className="text-base text-[#555555]">
-          제보를 찾을 수 없습니다.
-        </p>
+      <main className="min-h-screen bg-[#F8F9F8]">
+        <CommonHeader
+          img={backButton}
+          title="문제 현황"
+        />
 
-        <Link
-          to="/home"
-          className="font-semibold text-[#3B8519] underline"
-        >
-          홈으로 돌아가기
-        </Link>
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+          <p className="text-base text-[#555555]">
+            {error || "제보를 찾을 수 없습니다."}
+          </p>
+
+          <Link
+            to="/home"
+            className="font-semibold text-[#3B8519] underline"
+          >
+            홈으로 돌아가기
+          </Link>
+        </div>
       </main>
     );
   }

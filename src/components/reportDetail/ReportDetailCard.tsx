@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { CampusIssue } from "../../types/campusIssue";
 
 interface ReportDetailCardProps {
@@ -12,6 +13,14 @@ export default function ReportDetailCard({
   onToggleLike,
 }: ReportDetailCardProps) {
   const isResolved = report.status === "해결 완료";
+
+  // 이미지 로딩 실패 여부
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+
+  const imageUrl = report.imageUrl?.trim() ?? "";
+
+  const showImage =
+    Boolean(imageUrl) && failedImageUrl !== imageUrl;
 
   const location = [
     report.building,
@@ -89,17 +98,19 @@ export default function ReportDetailCard({
             제보 사진
           </p>
 
-          {report.imageUrl ? (
+          {showImage ? (
             <img
-              src={report.imageUrl}
+              src={imageUrl}
               alt={`${location} 제보 사진`}
               className="h-32 w-52 max-w-full rounded-[18px] object-cover"
+              onError={() => {
+                setFailedImageUrl(imageUrl);
+              }}
             />
           ) : (
-            <div
-              className="h-32 w-52 max-w-full rounded-[18px] bg-[#D9D9D9]"
-              aria-label="제보 사진 없음"
-            />
+            <div className="flex h-32 w-52 max-w-full items-center justify-center rounded-[18px] bg-[#F5F5F5] px-3 text-center text-xs text-[#777777]">
+              등록된 이미지가 없습니다.
+            </div>
           )}
         </section>
       )}

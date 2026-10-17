@@ -16,6 +16,8 @@ import type {
   ReportSubmission,
 } from "../../types/reportCreate";
 
+import type { CreateReportRequest } from "../../types/report";
+
 // 초기 입력값
 const initialForm: ReportCreateForm = {
   building: "",
@@ -114,22 +116,36 @@ export default function ReportCreate() {
     setError("");
 
     try {
-      // 이미지 업로드 API가 아직 없어 사진 첨부 시 등록 제한
-      if (form.image) {
-        setError(
-          "현재 이미지 업로드 API가 없어 사진을 등록할 수 없습니다. 사진을 제거하고 제보해 주세요.",
-        );
-        return;
-      }
-
-      // 제보 등록 API 호출
-      const response = await createReport({
+      // 제보 등록 JSON 데이터
+      const reportData: CreateReportRequest = {
         building: buildingCode,
         floor: floorCode,
         spaceDetail: form.space.trim(),
         content: form.content.trim(),
-        photoUrl: "",
-      });
+      };
+
+      // FormData 생성
+      const formData = new FormData();
+
+      // data: JSON 객체
+      formData.append(
+        "data",
+        new Blob([JSON.stringify(reportData)], {
+          type: "application/json",
+        }),
+      );
+
+      // image: 이미지가 있을 때만 첨부
+      if (form.image) {
+        formData.append(
+          "image",
+          form.image,
+          form.image.name,
+        );
+      }
+
+      // 제보 등록 API 호출
+      const response = await createReport(formData);
 
       // 등록 실패
       if (!response.success || !response.data) {
@@ -158,7 +174,9 @@ export default function ReportCreate() {
       setError(
         typeof message === "string" && message.trim()
           ? message
-          : "제보 등록에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+          : error instanceof Error
+            ? error.message
+            : "제보 등록에 실패했습니다. 잠시 후 다시 시도해 주세요.",
       );
     } finally {
       setIsSubmitting(false);
@@ -177,14 +195,19 @@ export default function ReportCreate() {
           취소
         </button>
 
-        <h1 className="text-lg font-bold text-[#111827]">제보하기</h1>
+        <h1 className="text-lg font-bold text-[#111827]">
+          제보하기
+        </h1>
       </header>
 
       {/* 메인 */}
       <main className="mx-auto w-full max-w-[720px] px-5 py-8 sm:px-8 sm:py-10">
         <form onSubmit={handleSubmit} noValidate>
           {/* 장소 */}
-          <section aria-labelledby="report-place-title" className="space-y-7">
+          <section
+            aria-labelledby="report-place-title"
+            className="space-y-7"
+          >
             <h2
               id="report-place-title"
               className="text-lg font-bold text-[#111827]"
@@ -194,29 +217,38 @@ export default function ReportCreate() {
 
             <BuildingSelector
               value={form.building}
-              onChange={(value) => updateForm("building", value)}
+              onChange={(value) =>
+                updateForm("building", value)
+              }
             />
 
             <FloorSelector
               value={form.floor}
-              onChange={(value) => updateForm("floor", value)}
+              onChange={(value) =>
+                updateForm("floor", value)
+              }
             />
 
             <ReportLocationInput
               value={form.space}
-              onChange={(value) => updateForm("space", value)}
+              onChange={(value) =>
+                updateForm("space", value)
+              }
             />
           </section>
 
           {/* 문제 내용 */}
           <section className="mt-10">
             <h2 className="mb-4 text-lg font-bold text-[#111827]">
-              문제 내용 <span className="text-[#3B8519]">*</span>
+              문제 내용{" "}
+              <span className="text-[#3B8519]">*</span>
             </h2>
 
             <ReportContentInput
               value={form.content}
-              onChange={(value) => updateForm("content", value)}
+              onChange={(value) =>
+                updateForm("content", value)
+              }
             />
           </section>
 
@@ -224,12 +256,16 @@ export default function ReportCreate() {
           <section className="mt-10">
             <h2 className="mb-4 text-lg font-bold text-[#111827]">
               사진{" "}
-              <span className="text-sm font-normal text-[#9CA3AF]">(선택)</span>
+              <span className="text-sm font-normal text-[#9CA3AF]">
+                (선택)
+              </span>
             </h2>
 
             <ReportImageUpload
               value={form.image}
-              onChange={(value) => updateForm("image", value)}
+              onChange={(value) =>
+                updateForm("image", value)
+              }
             />
 
             <p className="mt-3 text-xs text-[#9CA3AF]">
@@ -239,7 +275,10 @@ export default function ReportCreate() {
 
           {/* 오류 메시지 */}
           {error && (
-            <p role="alert" className="mt-6 text-sm font-medium text-red-600">
+            <p
+              role="alert"
+              className="mt-6 text-sm font-medium text-red-600"
+            >
               {error}
             </p>
           )}

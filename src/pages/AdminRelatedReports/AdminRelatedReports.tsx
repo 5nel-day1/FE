@@ -1,18 +1,11 @@
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { campusIssues } from "../../mocks/campusIssues";
-import { getReportsByIssueId } from "../../mocks/reports";
+import { getIssueGroupDetail } from "../../api/issueGroups";
+import type { IssueGroupDetail } from "../../types/issueGroup";
 
 import CommonHeader from "../../components/common/CommonHeader/CommonHeader";
 import backButton from "../../assets/images/back_button.png";
-
-const formatDate = (dateString: string) => {
-  const [date, time = ""] = dateString.split("T");
-
-  const [, month, day] = date.split("-");
-
-  return `${month}.${day} ${time.slice(0, 5)}`;
-};
 
 const AdminRelatedReports = () => {
   const navigate = useNavigate();
@@ -21,44 +14,108 @@ const AdminRelatedReports = () => {
 
   const issueId = Number(problemId);
 
-  // 문제 정보
-  const issue = campusIssues.find((item) => item.id === issueId);
+  // 문제 그룹 상세 데이터
+  const [groupDetail, setGroupDetail] =
+    useState<IssueGroupDetail | null>(null);
 
-  // 해당 문제에 연결된 전체 제보
-  const reports = getReportsByIssueId(issueId);
+  const [loading, setLoading] = useState(true);
 
-  if (!issue) {
+  const [error, setError] = useState("");
+
+  // 실제 문제 그룹 상세 API 조회
+  useEffect(() => {
+    if (
+      !problemId ||
+      !/^\d+$/.test(problemId) ||
+      !Number.isSafeInteger(issueId) ||
+      issueId <= 0
+    ) {
+      setGroupDetail(null);
+      setError("존재하지 않는 문제입니다.");
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
+
+    setGroupDetail(null);
+    setLoading(true);
+    setError("");
+
+    const fetchRelatedReports = async () => {
+      try {
+        const response = await getIssueGroupDetail(issueId);
+
+        if (!active) return;
+
+        if (!response.success || !response.data) {
+          throw new Error(
+            response.message ||
+              "관련 제보 조회에 실패했습니다.",
+          );
+        }
+
+        setGroupDetail(response.data);
+      } catch (error) {
+        if (!active) return;
+
+        console.error("관련 제보 조회 실패:", error);
+
+        setError("관련 제보를 불러오지 못했습니다.");
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void fetchRelatedReports();
+
+    return () => {
+      active = false;
+    };
+  }, [problemId, issueId]);
+
+  // 로딩 및 오류 처리
+  if (loading || error || !groupDetail) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#F7F8F6]">
         <div className="text-center">
           <p className="text-[16px] text-[#737373]">
-            존재하지 않는 문제입니다.
+            {loading
+              ? "관련 제보를 불러오는 중입니다."
+              : error || "존재하지 않는 문제입니다."}
           </p>
 
-          <button
-            type="button"
-            onClick={() => navigate("/admin/dashboard")}
-            className="mt-5 rounded-xl bg-[#3B8519] px-5 py-3 text-white"
-          >
-            대시보드로 돌아가기
-          </button>
+          {!loading && (
+            <button
+              type="button"
+              onClick={() => navigate("/admin/dashboard")}
+              className="mt-5 rounded-xl bg-[#3B8519] px-5 py-3 text-white"
+            >
+              대시보드로 돌아가기
+            </button>
+          )}
         </div>
       </main>
     );
   }
 
+  // 해당 문제 그룹에 연결된 전체 제보
+  const reports = groupDetail.reportContents ?? [];
+
   return (
     <main className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto bg-[#F7F8F6]">
-      
       <CommonHeader img={backButton} title="관련 제보" />
 
       {/* 본문 */}
       <div className="mx-auto w-full max-w-[900px] px-5 pb-12 pt-7 sm:px-7">
         {/* 문제 정보 */}
         <p className="mb-4 text-[14px] text-[#737373]">
-          {issue.building} {issue.floor} {issue.space}
+          {groupDetail.building} {groupDetail.floor}{" "}
+          {groupDetail.facility}
           {" · "}
-          {issue.category}
+          {groupDetail.problemType}
           {" · "}
           {reports.length}건
         </p>
@@ -72,9 +129,9 @@ const AdminRelatedReports = () => {
           </div>
         ) : (
           <div className="overflow-hidden rounded-[20px] border border-[#D9D9D9] bg-white">
-            {reports.map((report, index) => (
+            {reports.map((description, index) => (
               <div
-                key={report.id}
+                key={`${index}-${description}`}
                 className={`px-4 py-4 sm:px-5 ${
                   index !== reports.length - 1
                     ? "border-b border-[#D9D9D9]"
@@ -83,14 +140,7 @@ const AdminRelatedReports = () => {
               >
                 {/* 제보 내용 */}
                 <p className="break-keep text-[14px] font-semibold leading-6 text-black sm:text-[15px]">
-                  {index + 1}. {report.description}
-                </p>
-
-                {/* 접수 번호 및 날짜 */}
-                <p className="mt-1 text-[13px] text-[#737373]">
-                  S-{String(report.id).padStart(4, "0")}
-                  {" · "}
-                  {formatDate(report.createdAt)}
+                  {index + 1}. {description}
                 </p>
               </div>
             ))}

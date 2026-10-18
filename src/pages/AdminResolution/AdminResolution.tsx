@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -6,6 +6,14 @@ import { campusIssues } from "../../mocks/campusIssues";
 import { useIssueStore } from "../../stores/useIssueStore";
 import { useReportStore } from "../../stores/useReportStore";
 import { getReportsByIssueId } from "../../mocks/reports";
+
+import {
+  getIssueGroupDetail,
+  updateIssueGroupStatus,
+} from "../../api/issueGroups";
+
+import type { IssueGroupDetail } from "../../types/issueGroup";
+
 import { toast } from "../../utils/toast";
 import Button from "../../components/common/button/Button";
 
@@ -29,7 +37,10 @@ const resolutionTemplates = [
 
 const AdminResolution = () => {
   const navigate = useNavigate();
-  const { problemId } = useParams<{ problemId: string }>();
+
+  const { problemId } = useParams<{
+    problemId: string;
+  }>();
 
   const issueId = Number(problemId);
 
@@ -50,19 +61,77 @@ const AdminResolution = () => {
   // 기존 문제 또는 신규 제보
   const currentIssue = issue ?? submittedReport;
 
-  // 해결 완료 처리 함수
+  // 기존 목업 해결 완료 처리
   const completeIssue = useIssueStore(
     (state) => state.completeIssue,
   );
 
+  // 실제 서버 문제 그룹
+  const [serverIssue, setServerIssue] =
+    useState<IssueGroupDetail | null>(null);
+
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 처리 결과
   const [resolution, setResolution] = useState("");
 
+  // 실제 문제 그룹 상세 조회
+  useEffect(() => {
+    let active = true;
+
+    const fetchIssueDetail = async () => {
+      setIsLoading(true);
+
+      try {
+        const response = await getIssueGroupDetail(issueId);
+
+        if (!active) return;
+
+        if (!response.success || !response.data) {
+          throw new Error(
+            response.message ||
+              "문제 상세 조회에 실패했습니다.",
+          );
+        }
+
+        setServerIssue(response.data);
+      } catch (error) {
+        if (!active) return;
+
+        console.error(
+          "문제 그룹 상세 조회 실패:",
+          error,
+        );
+
+        setServerIssue(null);
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    if (Number.isInteger(issueId) && issueId > 0) {
+      void fetchIssueDetail();
+    } else {
+      setIsLoading(false);
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [issueId]);
+
   // 관련 제보 수
-  const reportCount = issue
-    ? getReportsByIssueId(issueId).length
-    : submittedReport
-      ? 1
-      : 0;
+  const reportCount = serverIssue
+    ? serverIssue.reportContents?.length ?? 0
+    : issue
+      ? getReportsByIssueId(issueId).length
+      : submittedReport
+        ? 1
+        : 0;
 
   const isValid = resolution.trim().length > 0;
 
@@ -72,35 +141,96 @@ const AdminResolution = () => {
   };
 
   // 처리 결과 등록
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (
+    e: FormEvent<HTMLFormElement>,
+  ) => {
     e.preventDefault();
 
-    if (!isValid || !currentIssue) return;
-
-    const success = completeIssue(issueId, resolution);
-
-    if (!success) {
-      toast.error("처리 결과 등록에 실패했습니다.");
+    if (!isValid || isSubmitting || isLoading) {
       return;
     }
 
-    toast.success(
-      "처리 결과가 등록되었습니다. 제보자에게 표시됩니다.",
-    );
+    setIsSubmitting(true);
 
-    // 기존 문제와 신규 제보의 상세 페이지 구분
-    navigate(
-      issue
-        ? `/admin/problems/${issueId}`
-        : `/admin/problems/submitted/${submittedReport?.id ?? issueId}`,
-      {
-        replace: true,
-      },
-    );
+    try {
+      // 실제 서버 문제 그룹
+      if (serverIssue) {
+        const response = await updateIssueGroupStatus(
+          issueId,
+          "RESOLVED",
+          resolution.trim(),
+        );
+
+        if (
+          !response.success ||
+          !response.data ||
+          response.data.status !== "RESOLVED"
+        ) {
+          throw new Error(
+            response.message ||
+              "해결 완료 처리에 실패했습니다.",
+          );
+        }
+
+        toast.success(
+          "처리 결과가 등록되었습니다. 제보자에게 표시됩니다.",
+        );
+
+        navigate(`/admin/problems/${issueId}`, {
+          replace: true,
+        });
+
+        return;
+      }
+
+      // 기존 목업 및 Zustand 문제 처리
+      if (!currentIssue) {
+        toast.error("문제 정보를 찾을 수 없습니다.");
+        return;
+      }
+
+      const success = completeIssue(
+        issueId,
+        resolution.trim(),
+      );
+
+      if (!success) {
+        throw new Error(
+          "처리 결과 등록에 실패했습니다.",
+        );
+      }
+
+      toast.success(
+        "처리 결과가 등록되었습니다. 제보자에게 표시됩니다.",
+      );
+
+      // 기존 문제와 신규 제보 상세 페이지 구분
+      navigate(
+        issue
+          ? `/admin/problems/${issueId}`
+          : `/admin/problems/submitted/${
+              submittedReport?.id ?? issueId
+            }`,
+        {
+          replace: true,
+        },
+      );
+    } catch (error) {
+      console.error(
+        "해결 완료 처리 실패:",
+        error,
+      );
+
+      toast.error(
+        "처리 결과 등록에 실패했습니다. 다시 시도해 주세요.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // 존재하지 않는 문제
-  if (!currentIssue) {
+  if (!isLoading && !serverIssue && !currentIssue) {
     return (
       <main className="flex min-h-0 w-full flex-1 items-center justify-center bg-[#F7F8F6]">
         <div className="text-center">
@@ -134,13 +264,18 @@ const AdminResolution = () => {
         {/* 문제 정보 */}
         <div>
           <h2 className="text-[20px] font-bold text-black">
-            {currentIssue.building}{" "}
-            {currentIssue.floor}{" "}
-            {currentIssue.space}
+            {serverIssue?.building ??
+              currentIssue?.building}{" "}
+            {serverIssue?.floor ??
+              currentIssue?.floor}{" "}
+            {serverIssue?.facility ??
+              currentIssue?.space}
           </h2>
 
           <p className="mt-1 text-[14px] text-[#737373]">
-            {issue?.category ?? "분석 대기"}
+            {serverIssue?.problemType ??
+              issue?.category ??
+              "분석 대기"}
           </p>
         </div>
 
@@ -157,7 +292,9 @@ const AdminResolution = () => {
           <textarea
             id="resolution"
             value={resolution}
-            onChange={(e) => setResolution(e.target.value)}
+            onChange={(e) =>
+              setResolution(e.target.value)
+            }
             placeholder="예: 배수구 점검 및 청소를 완료했습니다."
             className="h-[180px] w-full resize-none rounded-[18px] border border-[#D9D9D9] bg-white px-4 py-4 text-[14px] leading-6 text-black outline-none placeholder:text-[#C4C4C4] focus:border-[#3B8519]"
           />

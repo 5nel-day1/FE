@@ -4,8 +4,6 @@
 
 **Catch-U**는 학생들의 캠퍼스 불편 제보를 AI가 분석하여 반복되는 문제의 이상징후를 발견하고, 관리자가 신속하게 대응할 수 있도록 돕는 서비스입니다.
 
-본 레포지토리는 **Catch-U의 Frontend 프로젝트**로, React와 TypeScript를 기반으로 학생 및 관리자 웹 인터페이스를 구현하고 백엔드 REST API와 연동합니다.
-
 ## 🔗 배포 링크
 
 🌐 **Web Service** → https://catch-u.netlify.app

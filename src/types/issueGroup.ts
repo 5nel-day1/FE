@@ -27,6 +27,10 @@ export interface IssueGroupDetail extends IssueGroup {
   reportContents: string[];
   resolutionContent: string | null;
   resolvedAt: string | null;
+  reportTrend?: {
+    date: string;
+    count: number;
+  }[];
 }
 
 // 문제 그룹 상세 조회 응답

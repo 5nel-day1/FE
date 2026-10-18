@@ -31,9 +31,6 @@ export default function App() {
           {/* 관리자 로그인 */}
           <Route path="/admin/login" element={<ManagerLogin />} />
 
-          {/* 회원가입 */}
-          <Route path="/signup" element={<Signup />} />
-
           {/* 제보 */}
           <Route path="/reports/:id" element={<ReportDetail />} />
           <Route path="/student/report" element={<ReportCreate />} />

@@ -1,25 +1,35 @@
-import { dashboardSummary } from "../../mocks/adminDashboard";
+import type { AdminIssueGroup } from "../../types/admin";
 
-const DashboardSummary = () => {
+interface DashboardSummaryProps {
+  groups: AdminIssueGroup[];
+  isLoading?: boolean;
+  error?: string;
+}
+
+const DashboardSummary = ({
+  groups,
+  isLoading = false,
+  error = "",
+}: DashboardSummaryProps) => {
   const summaryItems = [
     {
       label: "전체",
-      count: dashboardSummary.total,
+      count: groups.length,
       color: "#13213C",
     },
     {
       label: "확인 중",
-      count: dashboardSummary.checking,
+      count: groups.filter((group) => group.status === "CHECKING").length,
       color: "#A67C52",
     },
     {
       label: "처리 중",
-      count: dashboardSummary.inProgress,
+      count: groups.filter((group) => group.status === "IN_PROGRESS").length,
       color: "#2C6FB0",
     },
     {
       label: "해결 완료",
-      count: dashboardSummary.resolved,
+      count: groups.filter((group) => group.status === "RESOLVED").length,
       color: "#3B8519",
     },
   ];
@@ -29,6 +39,12 @@ const DashboardSummary = () => {
       <h2 className="mb-4 text-[20px] font-bold text-[#13213C]">
         현황
       </h2>
+
+      {error && (
+        <p role="alert" className="mb-3 text-sm text-red-600">
+          {error}
+        </p>
+      )}
 
       <div className="grid grid-cols-4 gap-2 rounded-2xl border border-[#E5E7EB] bg-white px-3 py-6 shadow-sm sm:gap-4 sm:px-6">
         {summaryItems.map((item) => (
@@ -40,7 +56,7 @@ const DashboardSummary = () => {
               className="text-[26px] font-bold sm:text-[30px]"
               style={{ color: item.color }}
             >
-              {item.count}
+              {isLoading || error ? "-" : item.count}
             </span>
 
             <span className="whitespace-nowrap text-center text-[11px] font-medium text-[#6B7280] sm:text-[14px]">
